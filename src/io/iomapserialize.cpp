@@ -14,6 +14,8 @@
 #include "game/game.hpp"
 #include "items/bed.hpp"
 
+thread_local std::vector<std::shared_ptr<BedItem>> IOMapSerialize::bedsToCheck;
+
 void IOMapSerialize::loadHouseItems(Map* map) {
 	Benchmark bm_context;
 

@@ -376,7 +376,8 @@ else()
         -Wno-extra
     )
     # MinGW: unity-build chunks and the large bot engine TU overflow the COFF
-    # 2^16 section limit; enable big-obj and a larger template depth to match MSVC.
+    # 2^16 section limit; enable big-obj and a larger template depth to match
+    # MSVC.
     if(MINGW)
         add_compile_options(-Wa,-mbig-obj)
     endif()

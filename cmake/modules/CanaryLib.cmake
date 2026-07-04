@@ -149,6 +149,27 @@ foreach(
         )
     endif()
 
+    # === Windows system libraries (MinGW) ===
+    # MSVC auto-links these via #pragma comment(lib, ...) in asio/openssl/curl
+    # headers; MinGW ignores those pragmas, so link them explicitly.
+    if(WIN32
+       AND NOT MSVC
+    )
+        target_link_libraries(
+            ${core_target}
+            PUBLIC ws2_32
+                   mswsock
+                   wsock32
+                   bcrypt
+                   crypt32
+                   secur32
+                   iphlpapi
+                   userenv
+                   advapi32
+                   dbghelp
+        )
+    endif()
+
     # === OpenMP ===
     if(OPTIONS_ENABLE_OPENMP)
         if(OpenMP_CXX_FOUND)
