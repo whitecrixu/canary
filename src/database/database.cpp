@@ -10,26 +10,80 @@
 #include "database/database.hpp"
 
 #include "config/configmanager.hpp"
+#include "game/scheduling/dispatcher.hpp"
 #include "lib/di/container.hpp"
 #include "lib/metrics/metrics.hpp"
 #include "utils/tools.hpp"
 
-#include <iterator>
+#include <atomic>
+#include <cstdlib>
 
-#ifndef USE_PRECOMPILED_HEADERS
-	#include <fmt/format.h>
-	#include <string_view>
-#endif
+#include <chrono> // dbMonoMs (JITTER FIX 2026-06-10) — explicit, don't rely on PCH
 
+// PERF_INVESTIGATION_2026-05-24 pre-flight telemetry — log the first N sync
+// DB queries that fire on the dispatcher thread. Goal: identify which Lua /
+// C++ callsite is producing the hash_sparse 58.83% / pvio_socket_wait_io
+// 8.06% post-stall samples. Gated by BOT_PERF_TELEMETRY=1.
 namespace {
+bool dbPerfTelemetryEnabled() {
+	static const bool enabled = []() {
+		const char* v = std::getenv("BOT_PERF_TELEMETRY");
+		return v != nullptr && v[0] == '1';
+	}();
+	return enabled;
+}
 
-	void appendInsertBaseQuery(std::string &sql, std::string_view baseQuery, bool baseHasSpace) {
-		sql += baseQuery;
-		if (!baseHasSpace) {
-			sql.push_back(' ');
+std::atomic<uint32_t> s_dispatcherStoreQueryCount{0};
+std::atomic<uint32_t> s_dispatcherExecuteQueryCount{0};
+constexpr uint32_t MAX_LOGGED_DISPATCHER_QUERIES = 300;
+
+int64_t dbMonoUs() {
+	return std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+
+std::atomic<int64_t> s_dispatcherSyncDbUs { 0 };
+
+// JITTER FIX 2026-06-10: uncapped, duration-thresholded sync-query telemetry.
+// The first-300 capture above goes silent ~2h into uptime (cap exhausted by the
+// 10s bot_commands poll), leaving afternoon stall windows blind. This timer fires
+// for the whole process lifetime whenever a sync query issued FROM THE DISPATCHER
+// THREAD takes >10ms — measured across databaseLock acquisition + the query, so
+// head-of-line blocking behind a worker-thread transaction shows up here too.
+struct SyncDbTimer {
+	const char* kind;
+	std::string_view query;
+	int64_t start = 0;
+	bool active = false;
+	SyncDbTimer(const char* k, std::string_view q) :
+		kind(k), query(q) {
+		if (dbPerfTelemetryEnabled() && Dispatcher::isOnDispatcherThread()) {
+			active = true;
+			start = dbMonoUs();
 		}
 	}
+	~SyncDbTimer() {
+		if (!active) {
+			return;
+		}
+		int64_t dt_us = dbMonoUs() - start;
+		// Bundle 4: ALWAYS accumulate into the per-cycle dispatcher counter (drained
+		// by the dispatcher loop into CYCLE_SLOW dbsync=) — many sub-10ms queries
+		// convoying behind worker traffic are invisible to the threshold log below.
+		s_dispatcherSyncDbUs.fetch_add(dt_us, std::memory_order_relaxed);
+		if (dt_us > 10000) {
+			g_logger().warn("[DB_SYNC_SLOW] kind={} duration={}ms (incl. lock wait) query=\"{}\"",
+				kind, dt_us / 1000, query.substr(0, 160));
+		}
+	}
+};
+}
 
+void DbDispatcherStats::addSyncDbUs(int64_t us) {
+	s_dispatcherSyncDbUs.fetch_add(us, std::memory_order_relaxed);
+}
+
+int64_t DbDispatcherStats::fetchResetSyncDbUs() {
+	return s_dispatcherSyncDbUs.exchange(0, std::memory_order_relaxed);
 }
 
 Database::~Database() {
@@ -245,8 +299,18 @@ bool Database::executeQuery(std::string_view query) {
 		return false;
 	}
 
+	// PERF telemetry: log first N sync queries from the dispatcher thread.
+	if (dbPerfTelemetryEnabled() && Dispatcher::isOnDispatcherThread()) {
+		uint32_t c = s_dispatcherExecuteQueryCount.fetch_add(1, std::memory_order_relaxed);
+		if (c < MAX_LOGGED_DISPATCHER_QUERIES) {
+			g_logger().warn("[DB_SYNC_DISPATCHER] kind=execute count={} query=\"{}\"",
+				c + 1, query.substr(0, 160));
+		}
+	}
+
 	g_logger().trace("Executing Query: {}", query);
 
+	SyncDbTimer syncTimer("execute", query); // JITTER FIX: uncapped >10ms dispatcher-thread log
 	metrics::lock_latency measureLock("database");
 	std::scoped_lock lock { databaseLock };
 	measureLock.stop();
@@ -263,8 +327,19 @@ DBResult_ptr Database::storeQuery(std::string_view query) {
 		g_logger().error("Database not initialized!");
 		return nullptr;
 	}
+
+	// PERF telemetry: log first N sync queries from the dispatcher thread.
+	if (dbPerfTelemetryEnabled() && Dispatcher::isOnDispatcherThread()) {
+		uint32_t c = s_dispatcherStoreQueryCount.fetch_add(1, std::memory_order_relaxed);
+		if (c < MAX_LOGGED_DISPATCHER_QUERIES) {
+			g_logger().warn("[DB_SYNC_DISPATCHER] kind=store count={} query=\"{}\"",
+				c + 1, query.substr(0, 160));
+		}
+	}
+
 	g_logger().trace("Storing Query: {}", query);
 
+	SyncDbTimer syncTimer("store", query); // JITTER FIX: uncapped >10ms dispatcher-thread log
 	metrics::lock_latency measureLock("database");
 	std::scoped_lock lock { databaseLock };
 	measureLock.stop();
@@ -304,10 +379,6 @@ std::string Database::escapeString(const std::string &s) const {
 }
 
 std::string Database::escapeBlob(const char* s, uint32_t length) const {
-	metrics::lock_latency measureLock("database");
-	std::scoped_lock lock { databaseLock };
-	measureLock.stop();
-
 	size_t maxLength = (length * 2) + 1;
 
 	std::string escaped;
@@ -414,21 +485,13 @@ DBInsert::DBInsert(std::string insertQuery) :
 
 bool DBInsert::addRow(std::string_view row) {
 	const size_t rowLength = row.length();
+	length += rowLength;
 	auto max_packet_size = Database::getInstance().getMaxPacketSize();
-	size_t addedLength = values.empty() ? rowLength + 2 : rowLength + 3;
 
-	if (length + addedLength > max_packet_size) {
-		if (values.empty() || !execute()) {
-			return false;
-		}
-
-		addedLength = rowLength + 2;
-		if (length + addedLength > max_packet_size) {
-			return false;
-		}
+	if (length > max_packet_size && !execute()) {
+		return false;
 	}
 
-	length += addedLength;
 	if (values.empty()) {
 		values.reserve(rowLength + 2);
 		values.push_back('(');
@@ -459,37 +522,24 @@ bool DBInsert::execute() {
 		return true;
 	}
 
-	const std::string &baseQuery = this->query;
+	std::string baseQuery = this->query;
 	std::string upsertQuery;
 
 	if (!upsertColumns.empty()) {
-		size_t estimatedSize = 32;
-		for (const auto &column : upsertColumns) {
-			estimatedSize += (column.size() * 2) + 16;
-		}
-
-		upsertQuery.reserve(estimatedSize);
-		upsertQuery += " ON DUPLICATE KEY UPDATE ";
-		auto upsertOutput = std::back_inserter(upsertQuery);
+		std::ostringstream upsertStream;
+		upsertStream << " ON DUPLICATE KEY UPDATE ";
 		for (size_t i = 0; i < upsertColumns.size(); ++i) {
-			upsertOutput = fmt::format_to(upsertOutput, "`{0}` = VALUES(`{0}`)", upsertColumns[i]);
-			if (i + 1 < upsertColumns.size()) {
-				upsertQuery.push_back(',');
-				upsertQuery.push_back(' ');
+			upsertStream << "`" << upsertColumns[i] << "` = VALUES(`" << upsertColumns[i] << "`)";
+			if (i < upsertColumns.size() - 1) {
+				upsertStream << ", ";
 			}
 		}
+		upsertQuery = upsertStream.str();
 	}
 
 	std::string currentBatch = values;
-	const bool baseHasSpace = !baseQuery.empty() && baseQuery.back() == ' ';
-	const size_t separatorSize = baseHasSpace ? 0U : 1U;
-	const size_t queryPrefixSize = baseQuery.size() + separatorSize + upsertQuery.size();
-	if (queryPrefixSize >= Database::MAX_QUERY_SIZE) {
-		return false;
-	}
-
 	while (!currentBatch.empty()) {
-		size_t cutPos = Database::MAX_QUERY_SIZE - queryPrefixSize;
+		size_t cutPos = Database::MAX_QUERY_SIZE - baseQuery.size() - upsertQuery.size();
 		if (cutPos < currentBatch.size()) {
 			cutPos = currentBatch.rfind("),(", cutPos);
 			if (cutPos == std::string::npos) {
@@ -501,23 +551,17 @@ bool DBInsert::execute() {
 		}
 
 		std::string batchValues = currentBatch.substr(0, cutPos);
-		if (!batchValues.empty() && batchValues.back() == ',') {
+		if (batchValues.back() == ',') {
 			batchValues.pop_back();
 		}
 		currentBatch = currentBatch.substr(cutPos);
 
-		std::string sql;
-		sql.reserve(queryPrefixSize + batchValues.size());
-		appendInsertBaseQuery(sql, baseQuery, baseHasSpace);
-		sql += batchValues;
-		sql += upsertQuery;
-
-		if (!g_database().executeQuery(sql)) {
+		std::ostringstream query;
+		query << baseQuery << " " << batchValues << upsertQuery;
+		if (!Database::getInstance().executeQuery(query.str())) {
 			return false;
 		}
 	}
 
-	values.clear();
-	length = this->query.length();
 	return true;
 }

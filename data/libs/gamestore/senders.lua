@@ -431,18 +431,15 @@ local function sendStorePurchaseSuccessful(playerId, message)
 	end
 
 	local oldProtocol = player:getClient().version < 1200
-	local transferableCoins = player:getTransferableCoins()
-	local regularCoins = player:getTibiaCoins()
-	local totalCoins = regularCoins + transferableCoins
 	local msg = NetworkMessage()
 	msg:addByte(GameStore.SendingPackets.S_CompletePurchase)
 	msg:addByte(0x00)
 	msg:addString(message, "sendStorePurchaseSuccessful - message")
 	if oldProtocol then
 		-- Send all coins can be used for buy store offers
-		msg:addU32(totalCoins)
+		msg:addU32(player:getTibiaCoins())
 		-- Send transferable coins can be used on transfer
-		msg:addU32(transferableCoins)
+		msg:addU32(player:getTransferableCoins())
 	end
 
 	msg:sendToPlayer(player)
@@ -483,10 +480,6 @@ local function sendUpdatedStoreBalances(playerId)
 		return false
 	end
 
-	local transferableCoins = player:getTransferableCoins()
-	local regularCoins = player:getTibiaCoins()
-	local totalCoins = regularCoins + transferableCoins
-
 	local msg = NetworkMessage()
 	msg:addByte(GameStore.SendingPackets.S_CoinBalanceUpdating)
 	msg:addByte(0x01)
@@ -494,10 +487,9 @@ local function sendUpdatedStoreBalances(playerId)
 	msg:addByte(GameStore.SendingPackets.S_CoinBalance)
 	msg:addByte(0x01)
 
-	-- Send total of coins that can be used in store purchases.
-	msg:addU32(totalCoins)
-	-- Send transferable subset (used in market/gift and transferable-only checks).
-	msg:addU32(transferableCoins)
+	-- Send total of coins (transferable and normal coin)
+	msg:addU32(player:getTibiaCoins())
+	msg:addU32(player:getTransferableCoins()) -- How many are Transferable
 
 	local oldProtocol = player:getClient().version < 1200
 	if not oldProtocol then

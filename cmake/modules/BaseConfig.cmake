@@ -38,11 +38,7 @@ find_package(
     CONFIG
     REQUIRED
 )
-find_package(
-    MbedTLS
-    CONFIG
-    REQUIRED
-)
+find_package(OpenSSL REQUIRED)
 find_package(LuaJIT REQUIRED)
 find_package(MySQL REQUIRED)
 find_package(Protobuf REQUIRED)
@@ -349,6 +345,7 @@ if(MSVC)
         type
         RELEASE
         DEBUG
+        RELWITHDEBINFO
         MINSIZEREL
     )
         string(
@@ -417,38 +414,6 @@ function(setup_target TARGET_NAME)
                      "MultiThreaded$<$<CONFIG:Debug>:Debug>"
         )
     endif()
-
-    if(MSVC)
-        target_compile_options(
-            ${TARGET_NAME}
-            PRIVATE $<$<CONFIG:RelWithDebInfo>:/Zi>
-        )
-
-        get_target_property(
-            target_type
-            ${TARGET_NAME}
-            TYPE
-        )
-        if(target_type
-           STREQUAL
-           "EXECUTABLE"
-           OR target_type
-              STREQUAL
-              "SHARED_LIBRARY"
-           OR target_type
-              STREQUAL
-              "MODULE_LIBRARY"
-        )
-            target_link_options(
-                ${TARGET_NAME}
-                PRIVATE
-                $<$<CONFIG:RelWithDebInfo>:/DEBUG:FULL>
-                $<$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>>:/OPT:REF>
-                $<$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>>:/OPT:ICF>
-            )
-        endif()
-    endif()
-
     target_link_libraries(
         ${TARGET_NAME}
         PUBLIC project_options

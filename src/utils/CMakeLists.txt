@@ -5,5 +5,4 @@ target_sources(
             pugicast.cpp
             tools.cpp
             wildcardtree.cpp
-            batch_update.cpp
 )

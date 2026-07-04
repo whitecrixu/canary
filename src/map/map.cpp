@@ -17,9 +17,9 @@
 #include "io/iomap.hpp"
 #include "io/iomapserialize.hpp"
 #include "lua/callbacks/events_callbacks.hpp"
-#include "map/map_download.hpp"
 #include "map/spectators.hpp"
 #include "utils/astarnodes.hpp"
+#include "config/configmanager.hpp"
 
 void Map::load(const std::string &identifier, const Position &pos) {
 	try {
@@ -36,10 +36,6 @@ void Map::loadMap(const std::string &identifier, bool mainMap /*= false*/, bool 
 		const auto mapDownloadUrl = g_configManager().getString(MAP_DOWNLOAD_URL);
 		if (mapDownloadUrl.empty()) {
 			g_logger().warn("Map download URL in config.lua is empty, download disabled");
-		}
-
-		if (!mapDownloadUrl.empty()) {
-			MapDownload::warnIfOutdatedMapDownloadUrl(mapDownloadUrl);
 		}
 
 		if (CURL* curl = curl_easy_init(); curl && !mapDownloadUrl.empty()) {
@@ -231,13 +227,7 @@ void Map::setTile(uint16_t x, uint16_t y, uint8_t z, const std::shared_ptr<Tile>
 	}
 }
 
-bool Map::placeCreature(
-	const Position &centerPos,
-	const std::shared_ptr<Creature> &creature,
-	bool extendedPos /* = false*/,
-	bool forceLogin /* = false*/,
-	const std::shared_ptr<Tile> &centerTile /* = nullptr */
-) {
+bool Map::placeCreature(const Position &centerPos, const std::shared_ptr<Creature> &creature, bool extendedPos /* = false*/, bool forceLogin /* = false*/) {
 	const auto &monster = creature ? creature->getMonster() : nullptr;
 	if (monster) {
 		monster->ignoreFieldDamage = true;
@@ -246,7 +236,7 @@ bool Map::placeCreature(
 	bool foundTile;
 	bool placeInPZ;
 
-	auto tile = centerTile ? centerTile : getTile(centerPos.x, centerPos.y, centerPos.z);
+	auto tile = getTile(centerPos.x, centerPos.y, centerPos.z);
 	if (tile) {
 		placeInPZ = tile->hasFlag(TILESTATE_PROTECTIONZONE);
 		ReturnValue ret = tile->queryAdd(0, creature, 1, FLAG_IGNOREBLOCKITEM | FLAG_IGNOREFIELDDAMAGE);
@@ -403,19 +393,13 @@ void Map::moveCreature(const std::shared_ptr<Creature> &creature, const std::sha
 		spectators.find<Creature>(newPos, true, 0, 0, 0, 0, false);
 	}
 
-	std::vector<Player*> playerSpectators;
-	playerSpectators.reserve(spectators.size());
-	for (const auto &spectator : spectators) {
-		if (auto* player = spectator->getPlayerRaw()) {
-			playerSpectators.emplace_back(player);
-		}
-	}
+	const auto playersSpectators = spectators.filter<Player>();
 
 	std::vector<int32_t> oldStackPosVector;
-	oldStackPosVector.reserve(playerSpectators.size());
-	for (const auto* player : playerSpectators) {
-		if (player->canSeeCreature(creature)) {
-			oldStackPosVector.push_back(oldTile->getClientIndexOfCreature(player, creature));
+	oldStackPosVector.reserve(playersSpectators.size());
+	for (const auto &spec : playersSpectators) {
+		if (spec->canSeeCreature(creature)) {
+			oldStackPosVector.push_back(oldTile->getClientIndexOfCreature(spec->getPlayer(), creature));
 		} else {
 			oldStackPosVector.push_back(-1);
 		}
@@ -452,11 +436,12 @@ void Map::moveCreature(const std::shared_ptr<Creature> &creature, const std::sha
 
 	// send to client
 	size_t i = 0;
-	for (const auto* player : playerSpectators) {
+	for (const auto &spectator : playersSpectators) {
 		// Use the correct stackpos
 		const int32_t stackpos = oldStackPosVector[i++];
 		if (stackpos != -1) {
-			player->sendCreatureMove(creature, newPos, newTile->getClientIndexOfCreature(player, creature), oldPos, stackpos, teleport);
+			const auto &player = spectator->getPlayer();
+			player->sendCreatureMove(creature, newPos, newTile->getStackposOfCreature(player, creature), oldPos, stackpos, teleport);
 		}
 	}
 
@@ -677,7 +662,17 @@ std::shared_ptr<Tile> Map::canWalkTo(const std::shared_ptr<Creature> &creature, 
 
 	const auto &tile = getTile(pos.x, pos.y, pos.z);
 	if (creature->getTile() != tile) {
-		if (!tile || tile->queryAdd(0, creature, 1, FLAG_PATHFINDING | FLAG_IGNOREFIELDDAMAGE) != RETURNVALUE_NOERROR) {
+		uint32_t flags = FLAG_PATHFINDING | FLAG_IGNOREFIELDDAMAGE;
+		// Bot players can push items like strong monsters — let A* path through blocked tiles
+		const auto &player = creature->getPlayer();
+		if (player && player->isBotPlayer()) {
+			flags |= FLAG_IGNOREBLOCKITEM;
+			// Allow bots to path through creatures in PZ (push behavior, like real Tibia)
+			if (tile && tile->hasFlag(TILESTATE_PROTECTIONZONE)) {
+				flags |= FLAG_IGNOREBLOCKCREATURE;
+			}
+		}
+		if (!tile || tile->queryAdd(0, creature, 1, flags) != RETURNVALUE_NOERROR) {
 			return nullptr;
 		}
 	}

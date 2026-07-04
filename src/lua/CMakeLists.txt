@@ -1,6 +1,5 @@
 add_subdirectory(callbacks)
 add_subdirectory(creature)
-add_subdirectory(docgen)
 add_subdirectory(functions)
 add_subdirectory(global)
 add_subdirectory(modules)

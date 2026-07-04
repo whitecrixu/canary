@@ -38,7 +38,6 @@ public:
 	);
 
 	int run();
-	int generateLuaApiDocsOnly();
 
 private:
 	enum class LoaderStatus : uint8_t {
@@ -64,12 +63,11 @@ private:
 	static std::string getPlatform();
 
 	void loadConfigLua();
-	bool generateLuaApiDocs(bool force = false) const;
 	void validateDatapack();
 	void initializeDatabase();
 	void loadModules();
 	void setWorldType();
 	void loadMaps() const;
 	void setupHousesRent();
-	void modulesLoadHelper(bool loaded, std::string_view identifier);
+	void modulesLoadHelper(bool loaded, std::string moduleName);
 };

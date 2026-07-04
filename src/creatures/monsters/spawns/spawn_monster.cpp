@@ -163,6 +163,12 @@ bool SpawnsMonster::isInZone(const Position &centerPos, int32_t radius, const Po
 }
 
 void SpawnMonster::startSpawnMonsterCheck() {
+	// Defense in depth: don't enqueue a [this]-capturing lambda during shutdown.
+	// PR #3527's gate already drops these silently, but skipping here keeps
+	// checkSpawnMonsterEvent unset so we don't reference a stale id.
+	if (g_dispatcher().isShuttingDown()) {
+		return;
+	}
 	if (checkSpawnMonsterEvent == 0) {
 		checkSpawnMonsterEvent = g_dispatcher().scheduleEvent(
 			getInterval(), [this] { checkSpawnMonster(); }, "SpawnMonster::checkSpawnMonster"
@@ -305,7 +311,9 @@ void SpawnMonster::checkSpawnMonster() {
 		}
 	}
 
-	if (spawnedMonsterMap.size() < spawnMonsterMap.size()) {
+	// Defense in depth: skip re-scheduling during shutdown so the [this]
+	// lambda doesn't get queued only to hit the early-return guard later.
+	if (spawnedMonsterMap.size() < spawnMonsterMap.size() && !g_dispatcher().isShuttingDown()) {
 		checkSpawnMonsterEvent = g_dispatcher().scheduleEvent(
 			getInterval(), [this] { checkSpawnMonster(); }, "SpawnMonster::checkSpawnMonster"
 		);
@@ -316,6 +324,12 @@ void SpawnMonster::scheduleSpawn(uint32_t spawnMonsterId, spawnBlock_t &sb, cons
 	if (interval <= 0) {
 		spawnMonster(spawnMonsterId, sb, mType, startup);
 	} else {
+		// Don't re-schedule during shutdown — the lambda captures [&sb] which is
+		// a reference to a member of spawnMonsterMap. If the SpawnMonster owner
+		// is destroyed before the task fires, both `this` and `sb` dangle.
+		if (g_dispatcher().isShuttingDown()) {
+			return;
+		}
 		g_game().addMagicEffect(sb.pos, CONST_ME_TELEPORT);
 		g_dispatcher().scheduleEvent(
 			NONBLOCKABLE_SPAWN_MONSTER_INTERVAL, [=, this, &sb] { scheduleSpawn(spawnMonsterId, sb, mType, interval - NONBLOCKABLE_SPAWN_MONSTER_INTERVAL, startup); }, "SpawnMonster::scheduleSpawn"
@@ -456,11 +470,6 @@ std::shared_ptr<MonsterType> spawnBlock_t::getMonsterType() const {
 	if (monsterTypes.empty()) {
 		return nullptr;
 	}
-
-	if (monsterTypes.size() == 1) {
-		return monsterTypes.begin()->first;
-	}
-
 	uint32_t totalWeight = 0;
 	for (const auto &[mType, weight] : monsterTypes) {
 		if (!mType) {
@@ -474,24 +483,12 @@ std::shared_ptr<MonsterType> spawnBlock_t::getMonsterType() const {
 		}
 		totalWeight += weight;
 	}
-	if (totalWeight == 0) {
-		return nullptr;
-	}
-
 	uint32_t randomWeight = uniform_random(0, totalWeight - 1);
-	std::vector<std::pair<std::shared_ptr<MonsterType>, uint32_t>> orderedMonsterTypes;
-	orderedMonsterTypes.reserve(monsterTypes.size());
-	for (const auto &[mType, weight] : monsterTypes) {
-		if (!mType) {
-			continue;
-		}
-		orderedMonsterTypes.emplace_back(mType, weight);
-	}
-
-	[[maybe_unused]] const auto sortedEnd = std::ranges::sort(orderedMonsterTypes, [](const auto &lhs, const auto &rhs) {
-		return lhs.second > rhs.second;
+	// order monsters by weight DESC
+	std::vector<std::pair<std::shared_ptr<MonsterType>, uint32_t>> orderedMonsterTypes(monsterTypes.begin(), monsterTypes.end());
+	std::ranges::sort(orderedMonsterTypes, [](const auto &a, const auto &b) {
+		return a.second > b.second;
 	});
-
 	for (const auto &[mType, weight] : orderedMonsterTypes) {
 		if (randomWeight < weight) {
 			return mType;

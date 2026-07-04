@@ -21,9 +21,7 @@ npcConfig.outfit = {
 
 npcConfig.flags = {
 	floorchange = false,
-	profession = "banker",
 }
-npcConfig.speechBubble = SPEECHBUBBLE_BANKER
 npcConfig.shop = {
 	{ itemName = "shovel", clientId = 3457, count = 1 },
 }
@@ -258,7 +256,7 @@ local function creatureSayCallback(npc, creature, type, message)
 				"MY BEARD! MY PRECIOUS BEARD! IT WILL TAKE AGES TO CLEAR IT OF THIS CONFETTI!",
 			}, npc, creature)
 			npcHandler:removeInteraction(npc, creature)
-			npcHandler:resetNpc(npc, creature)
+			npcHandler:resetNpc(creature)
 		elseif npcHandler:getTopic(playerId) == 9 then
 			if not player:removeMoneyBank(100) then
 				npcHandler:say("You haven't got enough money for me.", npc, creature)

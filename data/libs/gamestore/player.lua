@@ -198,7 +198,8 @@ end
 local function removeCoinsBalance(self, coins)
 	if self:canRemoveCoins(coins) then
 		sendStoreBalanceUpdating(self:getId(), true)
-		return self:removeTibiaCoins(coins) == true
+		self:removeTibiaCoins(coins)
+		return true
 	end
 
 	return false
@@ -219,7 +220,8 @@ end
 local function removeTransferableCoinsBalance(self, coins)
 	if self:canRemoveTransferableCoins(coins) then
 		sendStoreBalanceUpdating(self:getId(), true)
-		return self:removeTransferableCoins(coins) == true
+		self:removeTransferableCoins(coins)
+		return true
 	end
 
 	return false
@@ -231,14 +233,6 @@ local function addTransferableCoinsBalance(self, coins, update)
 		sendStoreBalanceUpdating(self:getId(), true)
 	end
 	return true
-end
-
-local function removeCombinedCoinsBalance(self, coins)
-	local removed = self:removeTransferableAndTibiaCoins(coins) == true
-	if removed then
-		sendStoreBalanceUpdating(self:getId(), true)
-	end
-	return removed
 end
 
 local function makeCoinTransaction(self, offer, desc)
@@ -267,8 +261,8 @@ local function makeCoinTransaction(self, offer, desc)
 
 	if offer.coinType == GameStore.CoinType.Coin and self:canRemoveCoins(offer.price) then
 		op = self:removeCoinsBalance(offer.price)
-	elseif offer.coinType == GameStore.CoinType.Transferable and self:canPayForOffer(offer.price, offer.coinType) then
-		op = removeCombinedCoinsBalance(self, offer.price)
+	elseif offer.coinType == GameStore.CoinType.Transferable and self:canRemoveTransferableCoins(offer.price) then
+		op = self:removeTransferableCoinsBalance(offer.price)
 	end
 
 	if op then
@@ -284,8 +278,7 @@ local function canPayForOffer(self, coinsToRemove, coinType)
 	end
 
 	if coinType == GameStore.CoinType.Transferable then
-		-- Transferable coin offers can be paid using transferable and regular coins combined
-		return ((self:getTransferableCoins() or 0) + (self:getTibiaCoins() or 0)) >= coinsToRemove
+		return self:canRemoveTransferableCoins(coinsToRemove)
 	end
 
 	return false

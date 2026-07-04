@@ -617,13 +617,6 @@ function Player:sendHirelingOutfitWindow(hireling)
 	end
 	msg:addU16(outfit.lookMount)
 
-	if self:isUsingOTCR() then
-		msg:addU16(0) -- lookWing
-		msg:addU16(0) -- lookAura
-		msg:addU16(0) -- lookEffect
-		msg:addU16(0) -- lookShader
-	end
-
 	msg:addByte(0x00) -- Mount head
 	msg:addByte(0x00) -- Mount body
 	msg:addByte(0x00) -- Mount legs
@@ -645,12 +638,6 @@ function Player:sendHirelingOutfitWindow(hireling)
 	msg:addByte(0x00) -- Is mounted bool
 	msg:addByte(0x00) -- Random outfit bool
 
-	if self:isUsingOTCR() then
-		msg:addByte(0) -- Wings
-		msg:addByte(0) -- Auras
-		msg:addByte(0) -- Effects
-		msg:addByte(0) -- Shaders
-	end
 	msg:sendToPlayer(self)
 end
 

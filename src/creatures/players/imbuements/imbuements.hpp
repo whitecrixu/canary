@@ -54,12 +54,11 @@ public:
 
 	static Imbuements &getInstance();
 
-	[[nodiscard]] Imbuement* getImbuement(uint16_t id);
-	[[nodiscard]] Imbuement* getImbuementByScrollID(uint16_t scrollId);
+	Imbuement* getImbuement(uint16_t id);
 
-	[[nodiscard]] BaseImbuement* getBaseByID(uint16_t id);
-	[[nodiscard]] CategoryImbuement* getCategoryByID(uint16_t id);
-	[[nodiscard]] std::vector<Imbuement*> getImbuements(const std::shared_ptr<Player> &player, const std::shared_ptr<Item> &item = nullptr, bool scroll = false);
+	BaseImbuement* getBaseByID(uint16_t id);
+	CategoryImbuement* getCategoryByID(uint16_t id);
+	std::vector<Imbuement*> getImbuements(const std::shared_ptr<Player> &player, const std::shared_ptr<Item> &item);
 
 protected:
 	friend class Imbuement;
@@ -67,7 +66,6 @@ protected:
 
 private:
 	std::map<uint32_t, Imbuement> imbuementMap;
-	std::unordered_map<uint16_t, Imbuement*> scrollIdMap;
 
 	std::vector<BaseImbuement> basesImbuement;
 	std::vector<CategoryImbuement> categoriesImbuement;
@@ -82,38 +80,29 @@ public:
 	Imbuement(uint16_t initId, uint16_t initBaseId) :
 		id(initId), baseid(initBaseId) { }
 
-	[[nodiscard]] uint16_t getID() const;
+	uint16_t getID() const;
 
-	[[nodiscard]] uint16_t getBaseID() const;
+	uint16_t getBaseID() const;
 
-	[[nodiscard]] uint32_t getStorage() const;
+	uint32_t getStorage() const;
 
-	[[nodiscard]] bool isPremium() const;
-	[[nodiscard]] std::string getName() const;
-	[[nodiscard]] std::string getDescription() const;
+	bool isPremium() const;
+	std::string getName() const;
+	std::string getDescription() const;
 
-	[[nodiscard]] std::string getSubGroup() const;
+	std::string getSubGroup() const;
 
-	[[nodiscard]] uint16_t getCategory() const;
+	uint16_t getCategory() const;
 
-	[[nodiscard]] const std::vector<std::pair<uint16_t, uint16_t>> &getItems() const;
+	const std::vector<std::pair<uint16_t, uint16_t>> &getItems() const;
 
-	[[nodiscard]] uint16_t getIconID() const;
-	[[nodiscard]] uint16_t getScrollItemID() const;
+	uint16_t getIconID() const;
 
-	uint16_t scrollId = 0;
 	uint16_t icon = 1;
 	int32_t stats[maxSkillOrStatId + 1] = {};
 	int32_t skills[SKILL_LAST + 1] = {};
 	int32_t speed = 0;
 	uint32_t capacity = 0;
-
-	/////////Imbuement Vibrancy/////////
-	// Chance (0-100) to remove paralysis when a paralysis condition would be applied
-	uint8_t paralysisRemoveChance = 0;
-	// If true: when receiving additional PvP paralyse attacks while already paralyzed, the new paralyse is deflected (ignored)
-	bool pvpParalysisDeflect = false;
-
 	int16_t absorbPercent[COMBAT_COUNT] = {};
 	int16_t elementDamage = 0;
 	SoundEffect_t soundEffect = SoundEffect_t::SILENCE;

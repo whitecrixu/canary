@@ -16,9 +16,7 @@ npcConfig.outfit = {
 
 npcConfig.flags = {
 	floorchange = false,
-	profession = "trader",
 }
-npcConfig.speechBubble = SPEECHBUBBLE_TRADE
 
 local keywordHandler = KeywordHandler:new()
 local npcHandler = NpcHandler:new(keywordHandler)
@@ -120,13 +118,13 @@ local function creatureSayCallback(npc, creature, type, message)
 			npc:getPosition():sendMagicEffect(CONST_ME_GIFT_WRAPS)
 			npcHandler:say("I understand this as a peace-offering, human ... UNGH ... THIS IS AN OUTRAGE! THIS MEANS WAR!!!", npc, creature)
 			npcHandler:removeInteraction(npc, creature)
-			npcHandler:resetNpc(npc, creature)
+			npcHandler:resetNpc(creature)
 		end
 	elseif MsgContains(message, "bye") then
 		npcHandler:say("Hm ... good bye.", npc, creature)
 		player:addCondition(condition)
 		npcHandler:removeInteraction(npc, creature)
-		npcHandler:resetNpc(npc, creature)
+		npcHandler:resetNpc(creature)
 	end
 	return true
 end

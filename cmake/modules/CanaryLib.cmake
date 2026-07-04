@@ -109,18 +109,14 @@ foreach(
                fmt::fmt
                magic_enum::magic_enum
                mio::mio
-               protobuf::libprotobuf-lite
+               protobuf::libprotobuf
                pugixml::pugixml
                spdlog::spdlog
                unofficial::argon2::libargon2
                unofficial::libmariadb
                nlohmann_json::nlohmann_json
                protobuf
-    )
-
-    target_link_libraries(
-        ${core_target}
-        PRIVATE MbedTLS::mbedcrypto
+               OpenSSL::SSL
     )
 
     if(FEATURE_METRICS)
@@ -181,6 +177,16 @@ foreach(
     endif()
 
 endforeach()
+
+# Export symbols from the main binary so libbot_engine.so can resolve them via dlopen
+if(UNIX AND NOT APPLE)
+    foreach(
+        core_target IN
+        LISTS CANARY_CORE_TARGETS
+    )
+        target_link_options(${core_target} PRIVATE -rdynamic)
+    endforeach()
+endif()
 
 if(SPEED_UP_BUILD_UNITY)
     log_option_enabled("Build unity for speed up compilation")

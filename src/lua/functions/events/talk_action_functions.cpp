@@ -18,12 +18,7 @@
 #include "lua/scripts/luascript.hpp"
 
 void TalkActionFunctions::init(lua_State* L) {
-	Lua::registerSharedClass<TalkAction>(L, "", TalkActionFunctions::luaCreateTalkAction);
-	/***
-	 * @function TalkAction:onSay
-	 * @param callback fun(player: Player, words: string, param: string, type: integer): boolean
-	 * @return boolean
-	 */
+	Lua::registerSharedClass(L, "TalkAction", "", TalkActionFunctions::luaCreateTalkAction);
 	Lua::registerMethod(L, "TalkAction", "onSay", TalkActionFunctions::luaTalkActionOnSay);
 	Lua::registerMethod(L, "TalkAction", "groupType", TalkActionFunctions::luaTalkActionGroupType);
 	Lua::registerMethod(L, "TalkAction", "register", TalkActionFunctions::luaTalkActionRegister);
@@ -34,10 +29,6 @@ void TalkActionFunctions::init(lua_State* L) {
 	Lua::registerMethod(L, "TalkAction", "getGroupType", TalkActionFunctions::luaTalkActionGetGroupType);
 }
 
-/***
- * @class TalkAction
- * @overload fun(...: string): TalkAction
- */
 int TalkActionFunctions::luaCreateTalkAction(lua_State* L) {
 	// TalkAction(words) or TalkAction(word1, word2, word3)
 	std::vector<std::string> wordsVector;
@@ -47,7 +38,8 @@ int TalkActionFunctions::luaCreateTalkAction(lua_State* L) {
 
 	const auto talkactionSharedPtr = std::make_shared<TalkAction>();
 	talkactionSharedPtr->setWords(wordsVector);
-	Lua::pushSharedUserdata<TalkAction>(L, talkactionSharedPtr);
+	Lua::pushUserdata<TalkAction>(L, talkactionSharedPtr);
+	Lua::setMetatable(L, -1, "TalkAction");
 	return 1;
 }
 

@@ -49,6 +49,9 @@ public:
 
 	bool loadScheduleEventFromJson();
 
+	// Event schedule xml load
+	bool loadScheduleEventFromXml();
+
 	// Event schedule
 	uint16_t getExpSchedule() const {
 		return expSchedule;

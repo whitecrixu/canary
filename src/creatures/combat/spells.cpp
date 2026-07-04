@@ -64,7 +64,7 @@ Spells::~Spells() = default;
 TalkActionResult_t Spells::playerSaySpell(const std::shared_ptr<Player> &player, std::string &words) {
 	auto maxOnline = g_configManager().getNumber(MAX_PLAYERS_PER_ACCOUNT);
 	const auto &tile = player->getTile();
-	if (maxOnline > 1 && player->getAccountType() < ACCOUNT_TYPE_GAMEMASTER && tile && !tile->hasFlag(TILESTATE_PROTECTIONZONE)) {
+	if (maxOnline > 1 && player->getAccountType() < ACCOUNT_TYPE_GAMEMASTER && !player->isBotPlayer() && tile && !tile->hasFlag(TILESTATE_PROTECTIONZONE)) {
 		auto maxOutsizePZ = g_configManager().getNumber(MAX_PLAYERS_OUTSIDE_PZ_PER_ACCOUNT);
 		auto accountPlayers = g_game().getPlayersByAccount(player->getAccount());
 		int countOutsizePZ = 0;
@@ -123,11 +123,6 @@ TalkActionResult_t Spells::playerSaySpell(const std::shared_ptr<Player> &player,
 				}
 			}
 		}
-	}
-
-	if (instantSpell->getName() == "Find Person" && !player->canExiva(param)) {
-		player->sendTextMessage(MESSAGE_TRADE, "The character you are trying to find with Exiva is currently protected from your spell.");
-		return TALKACTION_FAILED;
 	}
 
 	if (instantSpell->playerCastInstant(player, param)) {
@@ -541,26 +536,16 @@ bool Spell::playerSpellCheck(const std::shared_ptr<Player> &player) const {
 		return false;
 	}
 
-	if (g_configManager().getBoolean(LEARN_SPELLS)) {
-		if (isInstant()) {
-			if (!player->hasLearnedInstantSpell(getName())) {
-				player->sendCancelMessage(RETURNVALUE_YOUNEEDTOLEARNTHISSPELL);
-				g_game().addMagicEffect(player->getPosition(), CONST_ME_POFF);
-				return false;
-			}
-		}
-	} else {
-		if (isInstant() && getNeedLearn()) {
-			if (!player->hasLearnedInstantSpell(getName())) {
-				player->sendCancelMessage(RETURNVALUE_YOUNEEDTOLEARNTHISSPELL);
-				g_game().addMagicEffect(player->getPosition(), CONST_ME_POFF);
-				return false;
-			}
-		} else if (!vocSpellMap.empty() && !vocSpellMap.contains(player->getVocationId()) && player->getGroup()->id < GROUP_TYPE_GAMEMASTER) {
-			player->sendCancelMessage(RETURNVALUE_YOURVOCATIONCANNOTUSETHISSPELL);
+	if (isInstant() && getNeedLearn()) {
+		if (!player->isBotPlayer() && !player->hasLearnedInstantSpell(getName())) {
+			player->sendCancelMessage(RETURNVALUE_YOUNEEDTOLEARNTHISSPELL);
 			g_game().addMagicEffect(player->getPosition(), CONST_ME_POFF);
 			return false;
 		}
+	} else if (!vocSpellMap.empty() && !vocSpellMap.contains(player->getVocationId()) && player->getGroup()->id < GROUP_TYPE_GAMEMASTER) {
+		player->sendCancelMessage(RETURNVALUE_YOURVOCATIONCANNOTUSETHISSPELL);
+		g_game().addMagicEffect(player->getPosition(), CONST_ME_POFF);
+		return false;
 	}
 
 	if (needWeapon) {
@@ -763,7 +748,7 @@ void Spell::getCombatDataAugment(const std::shared_ptr<Player> &player, CombatDa
 					continue;
 				}
 				if (
-					augment->type == Augment_t::IncreasedDamage || augment->type == Augment_t::PowerfulImpact || augment->type == Augment_t::StrongImpact || augment->type == Augment_t::BaseDamage || augment->type == Augment_t::BaseHealing
+					augment->type == Augment_t::IncreasedDamage || augment->type == Augment_t::PowerfulImpact || augment->type == Augment_t::StrongImpact || augment->type == Augment_t::Base
 				) {
 					const float augmentPercent = augment->value / 100.0;
 					damage.primary.value += static_cast<int32_t>(damage.primary.value * augmentPercent);
@@ -807,21 +792,8 @@ void Spell::applyCooldownConditions(const std::shared_ptr<Player> &player) const
 			spellCooldown -= getWheelOfDestinyBoost(WheelSpellBoost_t::COOLDOWN, spellGrade);
 		}
 		int32_t augmentCooldownReduction = calculateAugmentSpellCooldownReduction(player);
-		const auto wheelCooldownReduction = player->wheel().getSpellBonus(name, WheelSpellBoost_t::COOLDOWN);
-		const auto proficiencyCooldownReduction = player->weaponProficiency().getSpellBonus(m_spellId, WeaponProficiencySpellBoost_t::COOLDOWN);
-		g_logger().debug(
-			"[{}] spell name: {}, grade: {}, originalCooldown: {}, spellCooldown: {}, wheel bonus: {}, proficiency bonus: {}, augment {}",
-			__FUNCTION__,
-			name,
-			spellGrade,
-			cooldown,
-			spellCooldown,
-			wheelCooldownReduction,
-			proficiencyCooldownReduction,
-			augmentCooldownReduction
-		);
-		spellCooldown -= wheelCooldownReduction;
-		spellCooldown -= proficiencyCooldownReduction;
+		g_logger().debug("[{}] spell name: {}, grade: {}, originalCooldown: {}, spellCooldown: {}, bonus: {}, augment {}", __FUNCTION__, name, spellGrade, cooldown, spellCooldown, player->wheel().getSpellBonus(name, WheelSpellBoost_t::COOLDOWN), augmentCooldownReduction);
+		spellCooldown -= player->wheel().getSpellBonus(name, WheelSpellBoost_t::COOLDOWN);
 		spellCooldown -= augmentCooldownReduction;
 		const int32_t halfBaseCooldown = cooldown / 2;
 		spellCooldown = halfBaseCooldown > spellCooldown ? halfBaseCooldown : spellCooldown; // The cooldown should never be reduced less than half (50%) of its base cooldown
@@ -1396,10 +1368,6 @@ bool InstantSpell::canCast(const std::shared_ptr<Player> &player) const {
 		return true;
 	}
 
-	if (g_configManager().getBoolean(LEARN_SPELLS)) {
-		return player->hasLearnedInstantSpell(getName());
-	}
-
 	if (getNeedLearn()) {
 		if (player->hasLearnedInstantSpell(getName())) {
 			return true;
@@ -1510,7 +1478,7 @@ bool RuneSpell::executeUse(const std::shared_ptr<Player> &player, const std::sha
 	}
 
 	postCastSpell(player);
-	if (hasCharges && item && g_configManager().getBoolean(REMOVE_RUNE_CHARGES)) {
+	if (hasCharges && item && g_configManager().getBoolean(REMOVE_RUNE_CHARGES) && !player->isBotPlayer()) {
 		int32_t newCount = std::max<int32_t>(0, item->getItemCount() - 1);
 		g_game().transformItem(item, item->getID(), newCount);
 		player->updateSupplyTracker(item);

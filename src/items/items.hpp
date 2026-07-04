@@ -104,24 +104,24 @@ public:
 	ItemType(ItemType &&other) noexcept = default;
 	ItemType &operator=(ItemType &&other) = default;
 
-	[[nodiscard]] bool triggerExhaustion() const;
+	bool triggerExhaustion() const;
 
-	[[nodiscard]] bool isGroundTile() const {
+	bool isGroundTile() const {
 		return group == ITEM_GROUP_GROUND;
 	}
-	[[nodiscard]] bool isContainer() const {
+	bool isContainer() const {
 		return group == ITEM_GROUP_CONTAINER;
 	}
-	[[nodiscard]] bool isSplash() const {
+	bool isSplash() const {
 		return group == ITEM_GROUP_SPLASH;
 	}
-	[[nodiscard]] bool isFluidContainer() const {
+	bool isFluidContainer() const {
 		return group == ITEM_GROUP_FLUID;
 	}
-	[[nodiscard]] bool isShield() const {
+	bool isShield() const {
 		return type == ITEM_TYPE_SHIELD && !isSpellBook();
 	}
-	[[nodiscard]] bool isSpellBook() const {
+	bool isSpellBook() const {
 		return spellbook;
 	}
 
@@ -220,15 +220,15 @@ public:
 		return *abilities;
 	}
 
-	[[nodiscard]] int32_t getSpeed() const {
+	int32_t getSpeed() const {
 		return abilities ? abilities->speed : 0;
 	}
 
-	[[nodiscard]] int32_t getSkill(skills_t skill) const {
+	int32_t getSkill(skills_t skill) const {
 		return abilities ? abilities->skills[skill] : 0;
 	}
 
-	[[nodiscard]] int32_t getStat(stats_t stat) const {
+	int32_t getStat(stats_t stat) const {
 		return abilities ? abilities->stats[stat] : 0;
 	}
 
@@ -248,8 +248,8 @@ public:
 		return str;
 	}
 
-	[[nodiscard]] std::string parseAugmentDescription(bool inspect = false) const;
-	[[nodiscard]] std::string getFormattedAugmentDescription(const std::shared_ptr<AugmentInfo> &augmentInfo) const;
+	std::string parseAugmentDescription(bool inspect = false) const;
+	std::string getFormattedAugmentDescription(const std::shared_ptr<AugmentInfo> &augmentInfo) const;
 
 	void addAugment(std::string spellName, Augment_t augmentType, int32_t value);
 
@@ -330,8 +330,6 @@ public:
 	uint8_t imbuementSlot = 0;
 	uint8_t stackSize = 100;
 
-	uint16_t proficiencyId = 0;
-
 	int8_t hitChance = 0;
 
 	std::vector<std::shared_ptr<AugmentInfo>> augments;
@@ -400,8 +398,8 @@ public:
 	const ItemType &operator[](size_t id) const {
 		return getItemType(id);
 	}
-	[[nodiscard]] const ItemType &getItemType(size_t id) const;
-	[[nodiscard]] ItemType &getItemType(size_t id);
+	const ItemType &getItemType(size_t id) const;
+	ItemType &getItemType(size_t id);
 
 	/**
 	 * @brief Check if the itemid "hasId" is stored on "items", if not, return false
@@ -410,11 +408,11 @@ public:
 	 * @return true if the item exist
 	 * @return false if the item not exist
 	 */
-	[[nodiscard]] bool hasItemType(size_t hasId) const;
+	bool hasItemType(size_t hasId) const;
 
-	[[nodiscard]] uint16_t getItemIdByName(const std::string &name);
+	uint16_t getItemIdByName(const std::string &name);
 
-	[[nodiscard]] ItemTypes_t getLootType(const std::string &strValue) const;
+	ItemTypes_t getLootType(const std::string &strValue) const;
 
 	bool loadFromXml();
 	void parseItemNode(const pugi::xml_node &itemNode, uint16_t id);

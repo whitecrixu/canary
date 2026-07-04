@@ -131,7 +131,6 @@ enum class WheelStat_t : uint8_t {
 	MANA_LEECH_CHANCE = 13,
 	DODGE = 14,
 	CRITICAL_DAMAGE = 15,
-	CRITICAL_CHANCE = 16,
 
 	TOTAL_COUNT // Always last
 };

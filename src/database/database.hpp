@@ -83,13 +83,23 @@ private:
 	static bool isRecoverableError(unsigned int error);
 
 	MYSQL* handle = nullptr;
-	mutable std::recursive_mutex databaseLock;
+	std::recursive_mutex databaseLock;
 	uint64_t maxPacketSize = 1048576;
 
 	friend class DBTransaction;
 };
 
 constexpr auto g_database = Database::getInstance;
+
+// JITTER telemetry (bundle 4, 2026-06-11): cumulative time the DISPATCHER thread
+// spent inside synchronous DB calls (databaseLock wait + query round-trip),
+// accumulated by database.cpp's SyncDbTimer and drained once per dispatcher
+// cycle into the CYCLE_SLOW `dbsync=` field. Lets a slow cycle composed of many
+// individually-sub-threshold sync queries name DB convoying as its cause.
+namespace DbDispatcherStats {
+	void addSyncDbUs(int64_t us);
+	int64_t fetchResetSyncDbUs();
+}
 
 class DBResult {
 public:
@@ -248,30 +258,6 @@ public:
 			}
 
 			return result;
-		} catch (const std::exception &exception) {
-			transaction.rollback();
-			g_logger().error("[{}] Error occurred during transaction, error: {}", __FUNCTION__, exception.what());
-			return false;
-		}
-	}
-
-	template <typename Func>
-	static bool executeWithinTransactionRollbackOnFailure(const Func &callback)
-		requires std::invocable<Func>
-	{
-		DBTransaction transaction;
-		try {
-			if (!transaction.begin()) {
-				g_logger().error("[{}] Failed to begin transaction", __FUNCTION__);
-				return false;
-			}
-
-			if (!callback()) {
-				transaction.rollback();
-				return false;
-			}
-
-			return transaction.commit();
 		} catch (const std::exception &exception) {
 			transaction.rollback();
 			g_logger().error("[{}] Error occurred during transaction, error: {}", __FUNCTION__, exception.what());

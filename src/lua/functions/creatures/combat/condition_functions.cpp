@@ -15,13 +15,10 @@
 #include "lua/functions/lua_functions_loader.hpp"
 
 void ConditionFunctions::init(lua_State* L) {
-	Lua::registerSharedClass<Condition>(L, "", ConditionFunctions::luaConditionCreate);
+	Lua::registerSharedClass(L, "Condition", "", ConditionFunctions::luaConditionCreate);
 	Lua::registerMetaMethod(L, "Condition", "__eq", Lua::luaUserdataCompare);
-	/***
-	 * @function Condition.delete
-	 * @return nil
-	 */
-	Lua::registerMethod(L, "Condition", "delete", Lua::luaSharedPtrGarbageCollection<Condition>);
+	Lua::registerMetaMethod(L, "Condition", "__gc", ConditionFunctions::luaConditionDelete);
+	Lua::registerMethod(L, "Condition", "delete", ConditionFunctions::luaConditionDelete);
 
 	Lua::registerMethod(L, "Condition", "getId", ConditionFunctions::luaConditionGetId);
 	Lua::registerMethod(L, "Condition", "getSubId", ConditionFunctions::luaConditionGetSubId);
@@ -41,10 +38,6 @@ void ConditionFunctions::init(lua_State* L) {
 	Lua::registerMethod(L, "Condition", "addDamage", ConditionFunctions::luaConditionAddDamage);
 }
 
-/***
- * @class Condition
- * @overload fun(conditionType: integer, conditionId?: integer, subId?: integer, isPersistent?: boolean): Condition?
- */
 int ConditionFunctions::luaConditionCreate(lua_State* L) {
 	// Condition(conditionType, conditionId = CONDITIONID_COMBAT, subid = 0, isPersistent = false)
 	const ConditionType_t conditionType = Lua::getNumber<ConditionType_t>(L, 2);
@@ -59,11 +52,21 @@ int ConditionFunctions::luaConditionCreate(lua_State* L) {
 
 	const auto &condition = Condition::createCondition(conditionId, conditionType, 0, 0, false, subId, isPersistent);
 	if (condition) {
-		Lua::pushSharedUserdata<Condition>(L, condition);
+		Lua::pushUserdata<Condition>(L, condition);
+		Lua::setMetatable(L, -1, "Condition");
 	} else {
 		lua_pushnil(L);
 	}
 	return 1;
+}
+
+int ConditionFunctions::luaConditionDelete(lua_State* L) {
+	// condition:delete()
+	std::shared_ptr<Condition>* conditionPtr = Lua::getRawUserDataShared<Condition>(L, 1);
+	if (conditionPtr && *conditionPtr) {
+		conditionPtr->reset();
+	}
+	return 0;
 }
 
 int ConditionFunctions::luaConditionGetId(lua_State* L) {
@@ -131,7 +134,8 @@ int ConditionFunctions::luaConditionClone(lua_State* L) {
 	// condition:clone()
 	const auto &condition = Lua::getUserdataShared<Condition>(L, 1, "Condition");
 	if (condition) {
-		Lua::pushSharedUserdata<Condition>(L, condition->clone());
+		Lua::pushUserdata<Condition>(L, condition->clone());
+		Lua::setMetatable(L, -1, "Condition");
 	} else {
 		lua_pushnil(L);
 	}

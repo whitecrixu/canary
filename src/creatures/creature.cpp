@@ -162,7 +162,12 @@ void Creature::onAttacking(uint32_t interval) {
 
 	if (attackedCreature->getType() == CreatureType_t::CREATURETYPE_PLAYER) {
 		const auto &player = attackedCreature->getPlayer();
-		if (player && player->isDisconnected() && !player->isProtected()) {
+		// Bot players have client=nullptr so isDisconnected() is always true. Without
+		// the isBotPlayer guard, the first monster attack after wake grants the bot 30s
+		// of login-protection, during which Monster::doAttacking and Monster::selectTarget
+		// both return early — monsters can't damage or aggro the bot. Symptom reported:
+		// bot attacks monsters fine, but monsters don't hit back for ~30s after wake.
+		if (player && !player->isBotPlayer() && player->isDisconnected() && !player->isProtected()) {
 			player->setProtection(true);
 			player->setLoginProtection(30000);
 		}
@@ -275,7 +280,7 @@ bool Creature::getNextStep(Direction &dir, uint32_t &) {
 	return true;
 }
 
-void Creature::startAutoWalk(const std::vector<Direction> &listDir, bool ignoreConditions /* = false*/, WalkStartPolicy startPolicy /* = WalkStartPolicy::RespectDelay*/) {
+void Creature::startAutoWalk(const std::vector<Direction> &listDir, bool ignoreConditions /* = false*/) {
 	listWalkDir.clear();
 
 	if (!ignoreConditions && (hasCondition(CONDITION_ROOTED) || hasCondition(CONDITION_FEARED))) {
@@ -288,10 +293,10 @@ void Creature::startAutoWalk(const std::vector<Direction> &listDir, bool ignoreC
 		return;
 	}
 
-	addEventWalk(startPolicy);
+	addEventWalk(listWalkDir.size() == 1);
 }
 
-void Creature::addEventWalk(WalkStartPolicy startPolicy /* = WalkStartPolicy::RespectDelay*/) {
+void Creature::addEventWalk(bool firstStep) {
 	cancelNextWalk = false;
 
 	if (getStepSpeed() <= 0) {
@@ -302,16 +307,13 @@ void Creature::addEventWalk(WalkStartPolicy startPolicy /* = WalkStartPolicy::Re
 		return;
 	}
 
-	safeCall([this, startPolicy] {
-		if (eventWalk != 0) {
-			return;
-		}
+	const int64_t ticks = getEventStepTicks(firstStep);
+	if (ticks <= 0) {
+		return;
+	}
 
-		const int64_t ticks = getEventStepTicks(startPolicy);
-		if (ticks <= 0) {
-			return;
-		}
-
+	safeCall([this, ticks]() {
+		// Take first step right away, but still queue the next
 		if (ticks == 1) {
 			onCreatureWalk();
 		}
@@ -1490,14 +1492,14 @@ uint16_t Creature::getStepDuration(Direction dir) {
 	return duration;
 }
 
-int64_t Creature::getEventStepTicks(WalkStartPolicy startPolicy) {
-	const int64_t ret = getWalkDelay();
-	if (ret > 0) {
-		return ret;
+int64_t Creature::getEventStepTicks(bool onlyDelay) {
+	int64_t ret = getWalkDelay();
+	if (ret <= 0) {
+		const uint16_t stepDuration = getStepDuration();
+		ret = onlyDelay && stepDuration > 0 ? 1 : stepDuration * lastStepCost;
 	}
 
-	const uint16_t stepDuration = getStepDuration();
-	return startPolicy == WalkStartPolicy::ImmediateWhenReady && stepDuration > 0 ? 1 : stepDuration * lastStepCost;
+	return ret;
 }
 
 LightInfo Creature::getCreatureLight() const {

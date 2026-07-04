@@ -7,23 +7,21 @@ npcConfig.description = internalNpcName
 
 npcConfig.health = 100
 npcConfig.maxHealth = npcConfig.health
-npcConfig.walkInterval = 0
+npcConfig.walkInterval = 2000
 npcConfig.walkRadius = 2
 
 npcConfig.outfit = {
 	lookType = 151,
 	lookHead = 114,
-	lookBody = 131,
+	lookBody = 132,
 	lookLegs = 0,
-	lookFeet = 20,
+	lookFeet = 78,
 	lookAddons = 1,
 }
 
 npcConfig.flags = {
 	floorchange = false,
-	profession = "banker",
 }
-npcConfig.speechBubble = SPEECHBUBBLE_BANKER
 
 npcConfig.voices = {
 	interval = 15000,
@@ -445,10 +443,6 @@ keywordHandler:addKeyword({ "ser tybald" }, StdModule.say, {
 keywordHandler:addKeyword({ "wentworth" }, StdModule.say, {
 	npcHandler = npcHandler,
 	text = "Arrr. We go wayyyy back, Keeran an' me. Best you ask him, I'm no good at details.",
-})
-keywordHandler:addKeyword({ "key" }, StdModule.say, {
-	npcHandler = npcHandler,
-	text = "I'm a clerk now. I have better stuff to look after than just a simple key, friend.",
 })
 
 npcHandler:setMessage(

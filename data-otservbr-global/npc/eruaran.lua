@@ -21,9 +21,7 @@ npcConfig.outfit = {
 
 npcConfig.flags = {
 	floorchange = false,
-	profession = "trader",
 }
-npcConfig.speechBubble = SPEECHBUBBLE_TRADE
 
 local keywordHandler = KeywordHandler:new()
 local npcHandler = NpcHandler:new(keywordHandler)
@@ -468,7 +466,7 @@ local function creatureSayCallback(npc, creature, type, message)
 			end
 		end
 		npcHandler:removeInteraction(npc, creature)
-		npcHandler:resetNpc(npc, creature)
+		npcHandler:resetNpc(creature)
 	end
 end
 

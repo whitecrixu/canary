@@ -30,32 +30,17 @@ void SaveManager::saveAll() {
 	logger.info("Saving server...");
 	Benchmark bm_players;
 	const auto &players = game.getPlayers();
-	const bool savePlayersInParallel = threadPool.get_thread_count() > 1 && players.size() > 1;
 	std::vector<std::pair<std::future<void>, std::string>> pending;
-	logger.info("Saving {} players...", players.size());
-	if (savePlayersInParallel) {
-		pending.reserve(players.size());
-	}
-
+	const auto asyncSave = g_configManager().getBoolean(TOGGLE_SAVE_ASYNC);
+	logger.info("Saving {} players... (Async: {})", players.size(), asyncSave ? "Enabled" : "Disabled");
+	std::vector<std::future<void>> futures;
 	for (const auto &[_, player] : players) {
-		if (player->isDead()) {
-			player->loginPosition = player->getTemplePosition();
-		} else if (player->loginPosition != player->getTemplePosition()) {
-			player->loginPosition = player->getPosition();
-		}
+		player->loginPosition = player->getPosition();
 
-		if (savePlayersInParallel) {
-			auto fut = threadPool.submit_task([this, player] {
-				doSavePlayer(player);
-			});
-			pending.emplace_back(std::move(fut), player->getName());
-		} else {
-			try {
-				doSavePlayer(player);
-			} catch (const std::exception &e) {
-				logger.error("Failed to save player {}: {}", player->getName(), e.what());
-			}
-		}
+		auto fut = threadPool.submit_task([this, player] {
+			doSavePlayer(player);
+		});
+		pending.emplace_back(std::move(fut), player->getName());
 	}
 
 	for (auto &[future, name] : pending) {
@@ -122,8 +107,21 @@ void SaveManager::schedulePlayer(std::weak_ptr<Player> playerPtr) {
 		return;
 	}
 
+	// PERF_INVESTIGATION_2026-05-24 Tier 1-F + 1-G: bot players ALWAYS go through
+	// the async save path regardless of toggleSaveAsync config. The bot save chain
+	// is ~150 sync DB queries per bot (BEGIN + UPDATE players + many DELETE/INSERT
+	// for player_stash/spells/kills/charms/items/rewards/prey/taskhunt/bosstiary/
+	// storage). During bot load (500 bots starting) AND during hibernate sweeps
+	// (player walks away from a populated area), firing this chain synchronously
+	// on the dispatcher thread starves all globalevents and stalls the dispatcher
+	// for minutes (TF1/TF4 in PERF_INVESTIGATION_2026-05-24.md). Bot data loss on
+	// server crash is acceptable: bot population is re-derivable from the
+	// generator script + bot_state_persistence table.
+	// Real-player save path is unchanged (still respects toggleSaveAsync config).
+	const bool forceBotAsync = playerToSave->isBotPlayer();
+
 	// Disable save async if the config is set to false
-	if (!g_configManager().getBoolean(TOGGLE_SAVE_ASYNC)) {
+	if (!g_configManager().getBoolean(TOGGLE_SAVE_ASYNC) && !forceBotAsync) {
 		if (g_game().getGameState() == GAME_STATE_NORMAL) {
 			logger.debug("Saving player {}.", playerToSave->getName());
 		}
@@ -173,6 +171,13 @@ bool SaveManager::doSavePlayer(std::shared_ptr<Player> player) {
 
 bool SaveManager::savePlayer(std::shared_ptr<Player> player) {
 	if (player->isOnline() && g_game().getGameState() != GAME_STATE_SHUTDOWN) {
+		schedulePlayer(player);
+		return true;
+	}
+	// PERF Tier 1-F+1-G: route offline bot saves to async too (some bot code paths
+	// call savePlayer after player->setOnline(false)). Avoids sync 150-query stall
+	// on the dispatcher even in the rare offline-bot save case.
+	if (player->isBotPlayer() && g_game().getGameState() != GAME_STATE_SHUTDOWN) {
 		schedulePlayer(player);
 		return true;
 	}

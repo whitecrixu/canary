@@ -16,6 +16,7 @@
 #include "map/map_const.hpp"
 #include "utils/utils_definitions.hpp"
 
+class BotEngine;
 class CreatureEvent;
 class Condition;
 class Map;
@@ -95,34 +96,16 @@ public:
 	virtual std::shared_ptr<const Player> getPlayer() const {
 		return nullptr;
 	}
-	virtual Player* getPlayerRaw() noexcept {
-		return nullptr;
-	}
-	virtual const Player* getPlayerRaw() const noexcept {
-		return nullptr;
-	}
 	virtual std::shared_ptr<Npc> getNpc() {
 		return nullptr;
 	}
 	virtual std::shared_ptr<const Npc> getNpc() const {
 		return nullptr;
 	}
-	virtual Npc* getNpcRaw() noexcept {
-		return nullptr;
-	}
-	virtual const Npc* getNpcRaw() const noexcept {
-		return nullptr;
-	}
 	virtual std::shared_ptr<Monster> getMonster() {
 		return nullptr;
 	}
 	virtual std::shared_ptr<const Monster> getMonster() const {
-		return nullptr;
-	}
-	virtual Monster* getMonsterRaw() noexcept {
-		return nullptr;
-	}
-	virtual const Monster* getMonsterRaw() const noexcept {
 		return nullptr;
 	}
 
@@ -136,6 +119,22 @@ public:
 	virtual void setID() = 0;
 	void setRemoved() {
 		isInternalRemoved = true;
+	}
+	// Bot hibernation v5: clear the removed flag when waking a Player from the
+	// hibernation pool. Without this, woken bots retain isInternalRemoved=true
+	// (set by removeCreature during hibernate), which makes them invisible to
+	// monster targeting and excludes them from the cast viewer list filter
+	// (protocollogin.cpp filters by `!p->isRemoved()`).
+	void setNotRemoved() {
+		isInternalRemoved = false;
+	}
+	// Bot hibernation v5: reset the tile parent ref. Game::removeCreature does
+	// NOT clear m_tile, and setParent(empty) is a no-op (no else-branch in
+	// creature.cpp:1593). Without this, getParent() keeps returning the old tile,
+	// and Game::internalPlaceCreature (game.cpp:1162) rejects the placement —
+	// causing every pool-hit wake to fall back to the slow DB-load path.
+	void clearTileParent() {
+		m_tile.reset();
 	}
 
 	uint32_t getID() const {
@@ -207,38 +206,7 @@ public:
 	int32_t getWalkDelay(Direction dir = DIRECTION_NONE);
 	int64_t getTimeSinceLastMove() const;
 
-	/**
-	 * @brief Controls how the first queued walk step is scheduled.
-	 *
-	 * RespectDelay is the safe default for autonomous movement, follow
-	 * recalculations, monsters, and NPCs. ImmediateWhenReady exists only for
-	 * player-facing movement that must preserve responsive input when no walk
-	 * delay is active.
-	 *
-	 * @warning Do not use ImmediateWhenReady for creature AI or follow paths
-	 * unless the movement is intentionally player-controlled. That can
-	 * reintroduce repeated instant reactions on one-tile path recalculations.
-	 */
-	enum class WalkStartPolicy : uint8_t {
-		/// Honor the current walk delay or full step duration before walking.
-		RespectDelay,
-		/// Preserve legacy input responsiveness by requesting the first step
-		/// immediately when walking is ready.
-		ImmediateWhenReady,
-	};
-
-	/**
-	 * @brief Calculates the dispatcher delay for the next walk event.
-	 *
-	 * If getWalkDelay() still returns a positive delay, the start policy is
-	 * ignored. ImmediateWhenReady may only shorten the first delay when the
-	 * creature is already allowed to walk.
-	 *
-	 * @note Evaluate this inside addEventWalk() after checking eventWalk, so
-	 * deferred safeCall() execution cannot reuse stale timing or schedule a
-	 * duplicate event.
-	 */
-	int64_t getEventStepTicks(WalkStartPolicy startPolicy = WalkStartPolicy::RespectDelay);
+	int64_t getEventStepTicks(bool onlyDelay = false);
 	uint16_t getStepDuration(Direction dir = DIRECTION_NONE);
 	virtual uint16_t getStepSpeed() const {
 		return getSpeed();
@@ -368,29 +336,8 @@ public:
 	std::unordered_set<std::shared_ptr<Zone>> getZones();
 
 	// walk functions
-	/**
-	 * @brief Replaces the queued walk path and schedules its first event.
-	 *
-	 * @param listDir Directions to queue for walking.
-	 * @param ignoreConditions Whether rooted and feared conditions are ignored.
-	 * @param startPolicy First-step timing policy for this newly queued path.
-	 *
-	 * @note Player input paths may opt into ImmediateWhenReady. Follow,
-	 * pathfinding, monster, and NPC movement should keep the default
-	 * RespectDelay policy to avoid instant AI reactions.
-	 */
-	void startAutoWalk(const std::vector<Direction> &listDir, bool ignoreConditions = false, WalkStartPolicy startPolicy = WalkStartPolicy::RespectDelay);
-	/**
-	 * @brief Schedules the next walk event when no walk event is pending.
-	 *
-	 * @param startPolicy First-step timing policy for the pending path.
-	 *
-	 * @details The eventWalk guard is intentionally repeated inside safeCall()
-	 * because safeCall() may defer execution to the dispatcher. Keep timing
-	 * calculation in that callback so the pending-event state and walk delay are
-	 * current.
-	 */
-	void addEventWalk(WalkStartPolicy startPolicy = WalkStartPolicy::RespectDelay);
+	void startAutoWalk(const std::vector<Direction> &listDir, bool ignoreConditions = false);
+	void addEventWalk(bool firstStep = false);
 	void stopEventWalk();
 	void resetMovementState();
 
@@ -642,10 +589,6 @@ public:
 	void setParent(std::weak_ptr<Cylinder> cylinder) final;
 
 	const Position &getPosition() final {
-		return position;
-	}
-
-	const Position &getPosition() const final {
 		return position;
 	}
 
@@ -921,6 +864,7 @@ protected:
 	friend class Game;
 	friend class Map;
 	friend class CreatureFunctions;
+	friend class BotEngine;
 
 	void addAsyncTask(std::function<void()> &&fnc) {
 		asyncTasks.emplace_back(std::move(fnc));

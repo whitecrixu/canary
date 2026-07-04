@@ -36,7 +36,6 @@ public:
 	 * @param player A shared pointer to the player whose virtue state should be saved.
 	 */
 	static void savePlayerSystems(const std::shared_ptr<Player> &player);
-	static void savePlayerExivaRestrictions(const std::shared_ptr<Player> &player);
 
 protected:
 	using ItemBlockList = std::list<std::pair<int32_t, std::shared_ptr<Item>>>;

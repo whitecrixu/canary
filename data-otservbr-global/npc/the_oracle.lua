@@ -16,9 +16,7 @@ npcConfig.outfit = {
 
 npcConfig.flags = {
 	floorchange = false,
-	profession = "normal",
 }
-npcConfig.speechBubble = SPEECHBUBBLE_NORMAL
 
 local keywordHandler = KeywordHandler:new()
 local npcHandler = NpcHandler:new(keywordHandler)
@@ -72,10 +70,6 @@ local config = {
 			text = "A KNIGHT! ARE YOU SURE? THIS DECISION IS IRREVERSIBLE!",
 			vocationId = VOCATION.ID.KNIGHT,
 		},
-		["monk"] = {
-			text = "A MONK! ARE YOU SURE? THIS DECISION IS IRREVERSIBLE!",
-			vocationId = VOCATION.ID.MONK,
-		},
 	},
 }
 
@@ -85,16 +79,16 @@ local function greetCallback(npc, creature)
 	local level = player:getLevel()
 	if level < 8 then
 		npcHandler:say("CHILD! COME BACK WHEN YOU HAVE GROWN UP!", npc, creature)
-		npcHandler:resetNpc(npc, creature)
+		npcHandler:resetNpc(creature)
 		return false
-	elseif level >= 10 then
+	elseif level > 10 then
 		npcHandler:say(player:getName() .. ", I CAN'T LET YOU LEAVE - YOU ARE TOO STRONG ALREADY! \z
 		YOU CAN ONLY LEAVE WITH LEVEL 9 OR LOWER.", npc, creature)
-		npcHandler:resetNpc(npc, creature)
+		npcHandler:resetNpc(creature)
 		return false
 	elseif player:getVocation():getId() > VOCATION.ID.NONE then
 		npcHandler:say("YOU ALREADY HAVE A VOCATION!", npc, creature)
-		npcHandler:resetNpc(npc, creature)
+		npcHandler:resetNpc(creature)
 		return false
 	else
 		npcHandler:setMessage(MESSAGE_GREET, player:getName() .. ", ARE YOU PREPARED TO FACE YOUR DESTINY?")
@@ -120,7 +114,7 @@ local function creatureSayCallback(npc, creature, type, message)
 		if cityTable then
 			town[playerId] = cityTable
 			npcHandler:say("IN " .. string.upper(message) .. "! AND WHAT PROFESSION HAVE YOU CHOSEN: \z
-			{KNIGHT}, {PALADIN}, {SORCERER}, {DRUID} OR {MONK}?", npc, creature)
+			{KNIGHT}, {PALADIN}, {SORCERER}, OR {DRUID}?", npc, creature)
 			npcHandler:setTopic(playerId, 2)
 		else
 			npcHandler:say("IN WHICH TOWN DO YOU WANT TO LIVE: {CARLIN}, {THAIS}, OR {VENORE}?", npc, creature)
@@ -132,7 +126,7 @@ local function creatureSayCallback(npc, creature, type, message)
 			npcHandler:setTopic(playerId, 3)
 			vocation[playerId] = vocationTable.vocationId
 		else
-			npcHandler:say("{KNIGHT}, {PALADIN}, {SORCERER}, {DRUID}, OR {MONK}?", npc, creature)
+			npcHandler:say("{KNIGHT}, {PALADIN}, {SORCERER}, OR {DRUID}?", npc, creature)
 		end
 	elseif npcHandler:getTopic(playerId) == 3 then
 		if MsgContains(message, "yes") then
@@ -143,7 +137,7 @@ local function creatureSayCallback(npc, creature, type, message)
 			player:teleportTo(Town(town[playerId]):getTemplePosition())
 			player:getPosition():sendMagicEffect(CONST_ME_TELEPORT)
 		else
-			npcHandler:say("THEN WHAT? {KNIGHT}, {PALADIN}, {SORCERER}, {DRUID} OR {MONK}?", npc, creature)
+			npcHandler:say("THEN WHAT? {KNIGHT}, {PALADIN}, {SORCERER}, OR {DRUID}?", npc, creature)
 			npcHandler:setTopic(playerId, 2)
 		end
 	end

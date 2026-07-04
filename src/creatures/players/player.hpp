@@ -30,8 +30,6 @@
 #include "creatures/players/components/player_vip.hpp"
 #include "creatures/players/components/wheel/wheel_gems.hpp"
 #include "creatures/players/components/player_attached_effects.hpp"
-#include "creatures/players/components/weapon_proficiency.hpp"
-#include "utils/hash.hpp"
 
 class House;
 class NetworkMessage;
@@ -83,7 +81,6 @@ enum class HouseAuctionType : uint8_t;
 enum class BidErrorMessage : uint8_t;
 enum class TransferErrorMessage : uint8_t;
 enum class AcceptTransferErrorMessage : uint8_t;
-enum class ImbuementAction : uint8_t;
 enum ObjectCategory_t : uint8_t;
 enum PreySlot_t : uint8_t;
 enum SpeakClasses : uint8_t;
@@ -98,16 +95,6 @@ using UsersMap = std::map<uint32_t, std::shared_ptr<Player>>;
 using InvitedMap = std::map<uint32_t, std::shared_ptr<Player>>;
 using HouseMap = std::map<uint32_t, std::shared_ptr<House>>;
 
-struct SkillsEquipment {
-	double_t equipment = 0;
-	double_t imbuement = 0;
-};
-
-struct BaseCritical {
-	double_t chance = 0.05;
-	double_t damage = 0.1;
-};
-
 struct CharmInfo {
 	uint16_t raceId = 0;
 	uint8_t tier = 0;
@@ -121,14 +108,12 @@ struct OpenContainer {
 using MuteCountMap = std::map<uint32_t, uint32_t>;
 
 static constexpr uint16_t PLAYER_MAX_SPEED = std::numeric_limits<uint16_t>::max();
-static constexpr uint16_t PLAYER_MAX_STAFF_SPEED = 1500;
+static constexpr uint16_t PLAYER_MAX_STAFF_SPEED = 8000;
 static constexpr uint16_t PLAYER_MIN_SPEED = 10;
 static constexpr uint8_t PLAYER_SOUND_HEALTH_CHANGE = 10;
 
 class Player final : public Creature, public Cylinder, public Bankable {
 public:
-	using Thing::getDepotChest;
-
 	class PlayerLock {
 	public:
 		explicit PlayerLock(const std::shared_ptr<Player> &p) :
@@ -170,32 +155,6 @@ public:
 	std::shared_ptr<const Player> getPlayer() const override {
 		return static_self_cast<Player>();
 	}
-	Player* getPlayerRaw() noexcept override {
-		return this;
-	}
-	const Player* getPlayerRaw() const noexcept override {
-		return this;
-	}
-
-	struct ExivaRestrictions {
-		bool allowAll = false;
-		bool allowOwnGuild = true;
-		bool allowOwnParty = true;
-		bool allowVipList = true;
-		bool allowPlayerWhitelist = true;
-		bool allowGuildWhitelist = true;
-
-		std::vector<uint32_t> playerWhitelist;
-		std::vector<uint32_t> guildWhitelist;
-	};
-
-	ExivaRestrictions &getExivaRestrictions();
-	const ExivaRestrictions &getExivaRestrictions() const;
-
-	void sendWeaponProficiency(uint16_t weaponId = 0);
-
-	std::array<SkillsEquipment, SKILL_LAST + 1> getSkillsEquipment() const;
-	const BaseCritical &getBaseCritical() const;
 
 	/**
 	 * @brief Gets the current virtue of the player.
@@ -394,7 +353,6 @@ public:
 	bool isOldProtocol() const;
 
 	uint32_t getProtocolVersion() const;
-	std::shared_ptr<ProtocolGame> getClient() const;
 
 	bool hasSecureMode() const;
 
@@ -478,21 +436,9 @@ public:
 		return getIP() == 0;
 	}
 
-#ifdef BUILD_TESTS
-	void setTestIP(uint32_t testIpAddress) {
-		testIP = testIpAddress;
-	}
-
-	void setTestIdleTime(int32_t testIdleTimeInMs) {
-		idleTime = testIdleTimeInMs;
-	}
-#endif
-
 	void addContainer(uint8_t cid, const std::shared_ptr<Container> &container);
 	void closeContainer(uint8_t cid);
 	void setContainerIndex(uint8_t cid, uint16_t index);
-	void closeContainersOutOfRange();
-	bool shouldCloseContainer(const std::shared_ptr<Container> &container) const;
 
 	std::shared_ptr<Container> getContainerByID(uint8_t cid);
 	int8_t getContainerID(const std::shared_ptr<Container> &container) const;
@@ -560,6 +506,28 @@ public:
 	void switchGhostMode() {
 		ghostMode = !ghostMode;
 	}
+	bool isBotPlayer() const {
+		return botPlayer;
+	}
+	void setBotPlayer(bool v) {
+		botPlayer = v;
+	}
+	bool isBotAllowFcPos(const Position &pos) const {
+		return botAllowFcPos == pos;
+	}
+	void setBotAllowFcPos(const Position &pos) {
+		botAllowFcPos = pos;
+	}
+	void clearBotAllowFcPos() {
+		botAllowFcPos = {};
+	}
+	void initBotBaseSpeed() {
+		updateBaseSpeed();
+	}
+	bool isCastBroadcasting() const {
+		return castBroadcasting;
+	}
+	void setCastBroadcasting(bool v);
 	uint32_t getLevel() const {
 		return level;
 	}
@@ -686,7 +654,7 @@ public:
 	std::shared_ptr<DepotChest> getDepotChest(uint32_t depotId, bool autoCreate);
 	std::shared_ptr<DepotLocker> getDepotLocker(uint32_t depotId);
 	void onReceiveMail();
-	bool isNearDepotBox() const;
+	bool isNearDepotBox();
 
 	std::shared_ptr<Container> refreshManagedContainer(ObjectCategory_t category, const std::shared_ptr<Container> &container, bool isLootContainer, bool loading = false);
 	std::shared_ptr<Container> getManagedContainer(ObjectCategory_t category, bool isLootContainer) const;
@@ -753,12 +721,6 @@ public:
 	bool isImmune(ConditionType_t type) const override;
 	bool hasShield() const;
 	bool isAttackable() const override;
-	void beginBatchUpdate();
-	void endBatchUpdate();
-	void sendBatchUpdateContainer(Container* container, bool hasParent);
-	bool isBatching() const {
-		return m_batching > 0;
-	}
 	static bool lastHitIsPlayer(const std::shared_ptr<Creature> &lastHitCreature);
 
 	// stash functions
@@ -779,8 +741,7 @@ public:
 		uint32_t totalCount,
 		uint32_t &actuallyAdded,
 		uint32_t flags = 0,
-		uint8_t tier = 0,
-		bool testOnly = false
+		uint8_t tier = 0
 	);
 	ReturnValue addItemBatch(
 		uint16_t itemId,
@@ -829,7 +790,6 @@ public:
 
 	void updateLastAggressiveAction();
 
-	uint16_t getWeaponId(bool ignoreAmmo = false) const;
 	std::shared_ptr<Item> getWeapon(Slots_t slot, bool ignoreAmmo) const;
 	std::shared_ptr<Item> getWeapon(bool ignoreAmmo = false) const;
 	WeaponType_t getWeaponType() const;
@@ -938,8 +898,6 @@ public:
 
 	size_t getMaxDepotItems() const;
 
-	bool canExiva(const std::string &spellParam) const;
-
 	// tile
 	// send methods
 	// tile
@@ -980,8 +938,6 @@ public:
 	void sendUpdateContainerItem(const std::shared_ptr<Container> &container, uint16_t slot, const std::shared_ptr<Item> &newItem);
 	void sendRemoveContainerItem(const std::shared_ptr<Container> &container, uint16_t slot);
 	void sendContainer(uint8_t cid, const std::shared_ptr<Container> &container, bool hasParent, uint16_t firstIndex) const;
-
-	void sendExivaRestrictions();
 
 	// Monk Update
 	void sendMonkData(MonkData_t type, uint8_t value);
@@ -1106,12 +1062,9 @@ public:
 	void sendResourceBalance(Resource_t resourceType, uint64_t value) const;
 	void sendHouseAuctionMessage(uint32_t houseId, HouseAuctionType type, uint8_t index, bool bidSuccess = false) const;
 	// Imbuements
-	void applyScrollImbuement(const std::shared_ptr<Item> &item, const std::shared_ptr<Item> &scrollItem);
-	void createScrollImbuement(const Imbuement* imbuement);
-	void onApplyImbuement(const Imbuement* imbuement, const std::shared_ptr<Item> &item, uint8_t slot);
+	void onApplyImbuement(const Imbuement* imbuement, const std::shared_ptr<Item> &item, uint8_t slot, bool protectionCharm);
 	void onClearImbuement(const std::shared_ptr<Item> &item, uint8_t slot);
-	bool clearAllImbuements(const std::shared_ptr<Item> &item);
-	void openImbuementWindow(ImbuementAction action, const std::shared_ptr<Item> &item);
+	void openImbuementWindow(const std::shared_ptr<Item> &item);
 	void sendImbuementResult(const std::string &message) const;
 	void closeImbuementWindow() const;
 	void sendPodiumWindow(const std::shared_ptr<Item> &podium, const Position &position, uint16_t itemId, uint8_t stackpos) const;
@@ -1149,7 +1102,7 @@ public:
 
 	void sendOpenStash(bool isNpc = false) const;
 
-	void sendTakeScreenshot(Screenshot_t screenshotType, uint8_t skillId = 0, uint16_t skillLevel = 0, const std::string &achievementName = "", uint16_t raceId = 0, uint8_t bestiaryStep = 0) const;
+	void sendTakeScreenshot(Screenshot_t screenshotType) const;
 
 	void onThink(uint32_t interval) override;
 
@@ -1207,7 +1160,6 @@ public:
 	bool walkExhausted() const;
 
 	void setWalkExhaust(int64_t value);
-	void updateParalyzeWalkExhaust();
 
 	const std::map<uint8_t, OpenContainer> &getOpenContainers() const;
 
@@ -1469,8 +1421,6 @@ public:
 	// Gets the equipped items with augment
 	std::vector<std::shared_ptr<Item>> getEquippedAugmentItems() const;
 
-	std::unordered_map<std::pair<uint16_t, uint8_t>, double, PairHash, PairEqual> getEquippedAugments() const;
-
 	/**
 	 * @brief Get the equipped items of the player->
 	 * @details This function returns a vector containing the items currently equipped by the player
@@ -1514,13 +1464,8 @@ public:
 	PlayerAttachedEffects &attachedEffects();
 	const PlayerAttachedEffects &attachedEffects() const;
 
-	// Player storage interface
 	PlayerStorage &storage();
 	const PlayerStorage &storage() const;
-
-	// Player weapon proficiency interface
-	WeaponProficiency &weaponProficiency();
-	const WeaponProficiency &weaponProficiency() const;
 
 	void sendLootMessage(const std::string &message) const;
 
@@ -1554,10 +1499,6 @@ public:
 	void clearCooldowns(bool spenders = false, bool builders = false, int32_t ticks = 0);
 
 	void sendSpellCooldowns();
-
-	void updateFood(uint16_t itemId, uint32_t timeLeft);
-	const std::map<uint16_t, uint32_t> &getActiveFoods() const;
-	bool isFoodActive(uint16_t itemId) const;
 
 private:
 	friend class PlayerLock;
@@ -1619,7 +1560,7 @@ private:
 	// Function from player class with correct type sizes (uint16_t)
 	std::map<uint16_t, uint16_t> &getAllSaleItemIdAndCount(std::map<uint16_t, uint16_t> &countMap) const;
 	void getAllItemTypeCountAndSubtype(std::map<uint32_t, uint32_t> &countMap) const;
-	std::shared_ptr<Item> getForgeItemFromId(uint16_t itemId, uint8_t tier, const std::shared_ptr<Item> &exclude = nullptr) const;
+	std::shared_ptr<Item> getForgeItemFromId(uint16_t itemId, uint8_t tier) const;
 	std::shared_ptr<Thing> getThing(size_t index) const override;
 
 	void internalAddThing(const std::shared_ptr<Thing> &thing) override;
@@ -1648,8 +1589,6 @@ private:
 	std::map<uint32_t, std::shared_ptr<DepotChest>> depotChests;
 	std::map<uint8_t, int64_t> moduleDelayMap;
 	std::map<uint16_t, uint64_t> itemPriceMap;
-
-	std::map<uint16_t, uint32_t> m_activeFoods;
 
 	std::map<uint64_t, std::shared_ptr<Reward>> rewardMap;
 
@@ -1689,8 +1628,6 @@ private:
 
 	time_t lastLoginSaved = 0;
 	time_t lastLogout = 0;
-
-	BaseCritical baseCritical;
 
 	uint64_t experience = 0;
 	uint64_t manaSpent = 0;
@@ -1741,13 +1678,35 @@ private:
 	std::shared_ptr<Party> m_party = nullptr;
 	std::shared_ptr<Player> tradePartner = nullptr;
 	std::shared_ptr<ProtocolGame> client = nullptr;
+
+	// Cast viewer system — viewers share this Player via weak_ptr to their ProtocolGame
+	std::vector<std::weak_ptr<ProtocolGame>> castViewers;
+	bool castBroadcasting = false;
+	uint32_t castNextViewerNumber = 0;
+
+	void addCastViewer(const std::shared_ptr<ProtocolGame> &viewer);
+	void removeCastViewer(const std::shared_ptr<ProtocolGame> &viewer);
+	void disconnectAllCastViewers();
+	uint32_t getCastViewerCount() const;
+	uint32_t getNextCastViewerNumber() { return ++castNextViewerNumber; }
+	void castDiagnosticCheck();
+
+	template <typename Func>
+	void forwardToCastViewers(Func &&fn) const {
+		for (auto it = castViewers.begin(); it != castViewers.end();) {
+			if (auto viewer = it->lock()) {
+				fn(viewer.get());
+				++it;
+			} else {
+				it = const_cast<std::vector<std::weak_ptr<ProtocolGame>> &>(castViewers).erase(it);
+			}
+		}
+	}
+
 	std::shared_ptr<Task> walkTask;
 	std::shared_ptr<Town> town;
 	std::shared_ptr<Vocation> vocation = nullptr;
 	std::shared_ptr<RewardChest> rewardChest = nullptr;
-#ifdef BUILD_TESTS
-	uint32_t testIP = 0;
-#endif
 
 	uint32_t inventoryWeight = 0;
 	uint32_t capacity = 40000;
@@ -1833,13 +1792,13 @@ private:
 	QuickLootFilter_t quickLootFilter {};
 	PlayerPronoun_t pronoun = PLAYERPRONOUN_THEY;
 
-	ExivaRestrictions exivaRestrictions;
-
 	bool chaseMode = false;
 	bool secureMode = true;
 	bool inMarket = false;
 	bool wasMounted = false;
 	bool ghostMode = false;
+	bool botPlayer = false;
+	Position botAllowFcPos = {}; // Transient: when set, A* can path onto the FC/teleport tile at this exact position only
 	bool pzLocked = false;
 	bool isConnecting = false;
 	bool addAttackSkillPoint = false;
@@ -1927,6 +1886,7 @@ private:
 	friend class PlayerAttachedEffects;
 	friend class PlayerStorage;
 	friend class PlayerForgeHistory;
+	friend class BotEngine;
 
 	PlayerWheel m_wheelPlayer;
 	PlayerAchievement m_playerAchievement;
@@ -1938,10 +1898,8 @@ private:
 	PlayerAttachedEffects m_playerAttachedEffects;
 	PlayerStorage m_storage;
 	PlayerForgeHistory m_forgeHistoryPlayer;
-	WeaponProficiency m_weaponProficiency;
 
 	std::mutex quickLootMutex;
-	uint32_t m_batching = 0;
 
 	std::shared_ptr<Account> account;
 	bool online = true;

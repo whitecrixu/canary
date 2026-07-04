@@ -19,7 +19,7 @@
 #include "lua/functions/lua_functions_loader.hpp"
 
 void CombatFunctions::init(lua_State* L) {
-	Lua::registerSharedClass<Combat>(L, "", CombatFunctions::luaCombatCreate);
+	Lua::registerSharedClass(L, "Combat", "", CombatFunctions::luaCombatCreate);
 	Lua::registerMetaMethod(L, "Combat", "__eq", Lua::luaUserdataCompare);
 
 	Lua::registerMethod(L, "Combat", "setParameter", CombatFunctions::luaCombatSetParameter);
@@ -37,14 +37,11 @@ void CombatFunctions::init(lua_State* L) {
 	VariantFunctions::init(L);
 }
 
-/***
- * @class Combat
- * @overload fun(): Combat
- */
 int CombatFunctions::luaCombatCreate(lua_State* L) {
 	// Combat()
 	auto combat = std::make_shared<Combat>();
-	Lua::pushSharedUserdata<Combat>(L, combat);
+	Lua::pushUserdata<Combat>(L, combat);
+	Lua::setMetatable(L, -1, "Combat");
 	return 1;
 }
 
@@ -115,7 +112,7 @@ int CombatFunctions::luaCombatSetArea(lua_State* L) {
 int CombatFunctions::luaCombatSetCondition(lua_State* L) {
 	// combat:addCondition(condition)
 	const std::shared_ptr<Condition> &condition = Lua::getUserdataShared<Condition>(L, 2, "Condition");
-	const auto &combat = Lua::getUserdataShared<Combat>(L, 1, "Combat");
+	auto* combat = Lua::getUserdata<Combat>(L, 1);
 	if (combat && condition) {
 		combat->addCondition(condition->clone());
 		Lua::pushBoolean(L, true);

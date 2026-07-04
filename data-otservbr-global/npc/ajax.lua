@@ -21,9 +21,7 @@ npcConfig.outfit = {
 
 npcConfig.flags = {
 	floorchange = false,
-	profession = "trader",
 }
-npcConfig.speechBubble = SPEECHBUBBLE_TRADE
 
 local keywordHandler = KeywordHandler:new()
 local npcHandler = NpcHandler:new(keywordHandler)
@@ -155,7 +153,7 @@ local function creatureSayCallback(npc, creature, type, message)
 			player:setStorageValue(Storage.Quest.U7_8.BarbarianOutfits.BarbarianAddon, 2)
 			player:setStorageValue(Storage.Quest.U7_8.BarbarianOutfits.BarbarianAddonWaitTimer, os.time() + 60 * 60) -- 1 hour
 			npcHandler:removeInteraction(npc, creature)
-			npcHandler:resetNpc(npc, creature)
+			npcHandler:resetNpc(creature)
 		elseif npcHandler:getTopic(playerId) == 6 then
 			npcHandler:say({
 				"Good! Me make shiny weapon. If you help me, I make one for you too. Like axe I wear. I need stuff. Listen. ...",

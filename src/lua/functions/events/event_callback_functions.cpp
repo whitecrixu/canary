@@ -27,7 +27,7 @@
  */
 
 void EventCallbackFunctions::init(lua_State* luaState) {
-	Lua::registerSharedClass<EventCallback>(luaState, "", EventCallbackFunctions::luaEventCallbackCreate);
+	Lua::registerSharedClass(luaState, "EventCallback", "", EventCallbackFunctions::luaEventCallbackCreate);
 	Lua::registerMethod(luaState, "EventCallback", "type", EventCallbackFunctions::luaEventCallbackType);
 	Lua::registerMethod(luaState, "EventCallback", "register", EventCallbackFunctions::luaEventCallbackRegister);
 }
@@ -41,7 +41,8 @@ int EventCallbackFunctions::luaEventCallbackCreate(lua_State* luaState) {
 
 	bool skipDuplicationCheck = Lua::getBoolean(luaState, 3, false);
 	const auto eventCallback = std::make_shared<EventCallback>(callbackName, skipDuplicationCheck);
-	Lua::pushSharedUserdata<EventCallback>(luaState, eventCallback);
+	Lua::pushUserdata<EventCallback>(luaState, eventCallback);
+	Lua::setMetatable(luaState, -1, "EventCallback");
 	return 1;
 }
 

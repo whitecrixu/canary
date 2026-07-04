@@ -173,7 +173,8 @@ void Module::executeOnRecvbyte(const std::shared_ptr<Player> &player, NetworkMes
 	LuaScriptInterface::pushUserdata<Player>(L, player);
 	LuaScriptInterface::setMetatable(L, -1, "Player");
 
-	LuaScriptInterface::pushBorrowedSharedUserdata<NetworkMessage>(L, msg);
+	LuaScriptInterface::pushUserdata<NetworkMessage>(L, std::shared_ptr<NetworkMessage>(&msg));
+	LuaScriptInterface::setWeakMetatable(L, -1, "NetworkMessage");
 
 	lua_pushnumber(L, recvbyte);
 

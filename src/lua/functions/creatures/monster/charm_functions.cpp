@@ -14,7 +14,7 @@
 #include "lua/functions/lua_functions_loader.hpp"
 
 void CharmFunctions::init(lua_State* L) {
-	Lua::registerSharedClass<Charm>(L, "", CharmFunctions::luaCharmCreate);
+	Lua::registerSharedClass(L, "Charm", "", CharmFunctions::luaCharmCreate);
 	Lua::registerMetaMethod(L, "Charm", "__eq", Lua::luaUserdataCompare);
 
 	Lua::registerMethod(L, "Charm", "name", CharmFunctions::luaCharmName);
@@ -39,7 +39,8 @@ int CharmFunctions::luaCharmCreate(lua_State* L) {
 		const auto charmList = g_game().getCharmList();
 		for (const auto &charm : charmList) {
 			if (charm->id == charmid) {
-				Lua::pushSharedUserdata<Charm>(L, charm);
+				Lua::pushUserdata<Charm>(L, charm);
+				Lua::setMetatable(L, -1, "Charm");
 				Lua::pushBoolean(L, true);
 			}
 		}

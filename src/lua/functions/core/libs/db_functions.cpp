@@ -9,6 +9,7 @@
 
 #include "lua/functions/core/libs/db_functions.hpp"
 
+#include "database/botdatabasetasks.hpp"
 #include "database/databasemanager.hpp"
 #include "database/databasetasks.hpp"
 #include "lua/scripts/lua_environment.hpp"
@@ -20,6 +21,11 @@ void DBFunctions::init(lua_State* L) {
 	Lua::registerMethod(L, "db", "asyncQuery", DBFunctions::luaDatabaseAsyncExecute);
 	Lua::registerMethod(L, "db", "storeQuery", DBFunctions::luaDatabaseStoreQuery);
 	Lua::registerMethod(L, "db", "asyncStoreQuery", DBFunctions::luaDatabaseAsyncStoreQuery);
+	// Bundle 6 (2026-06-11): bot variants route to the dedicated BotDatabaseTasks
+	// worker (own thread + own connection) instead of the shared pool — see
+	// botdatabasetasks.hpp for the worker-theft rationale. Bot Lua only.
+	Lua::registerMethod(L, "db", "botAsyncQuery", DBFunctions::luaDatabaseBotAsyncExecute);
+	Lua::registerMethod(L, "db", "botAsyncStoreQuery", DBFunctions::luaDatabaseBotAsyncStoreQuery);
 	Lua::registerMethod(L, "db", "escapeString", DBFunctions::luaDatabaseEscapeString);
 	Lua::registerMethod(L, "db", "escapeBlob", DBFunctions::luaDatabaseEscapeBlob);
 	Lua::registerMethod(L, "db", "lastInsertId", DBFunctions::luaDatabaseLastInsertId);
@@ -27,19 +33,11 @@ void DBFunctions::init(lua_State* L) {
 }
 
 int DBFunctions::luaDatabaseExecute(lua_State* L) {
-	// db.query(query)
 	Lua::pushBoolean(L, Database::getInstance().executeQuery(Lua::getString(L, -1)));
 	return 1;
 }
 
-/***
- * @function db.asyncQuery
- * @param query string
- * @param callback? fun(success: boolean)
- * @return nil
- */
 int DBFunctions::luaDatabaseAsyncExecute(lua_State* L) {
-	// db.asyncQuery(query[, callback])
 	std::function<void(DBResult_ptr, bool)> callback;
 	if (lua_gettop(L) > 1) {
 		int32_t ref = luaL_ref(L, LUA_REGISTRYINDEX);
@@ -68,8 +66,71 @@ int DBFunctions::luaDatabaseAsyncExecute(lua_State* L) {
 	return 0;
 }
 
+int DBFunctions::luaDatabaseBotAsyncExecute(lua_State* L) {
+	// Mirror of luaDatabaseAsyncExecute targeting g_botDatabaseTasks() (bundle 6).
+	std::function<void(DBResult_ptr, bool)> callback;
+	if (lua_gettop(L) > 1) {
+		int32_t ref = luaL_ref(L, LUA_REGISTRYINDEX);
+		auto scriptId = Lua::getScriptEnv()->getScriptId();
+		callback = [ref, scriptId](const DBResult_ptr &, bool success) {
+			lua_State* luaState = g_luaEnvironment().getLuaState();
+			if (!luaState) {
+				return;
+			}
+
+			if (!Lua::reserveScriptEnv()) {
+				luaL_unref(luaState, LUA_REGISTRYINDEX, ref);
+				return;
+			}
+
+			lua_rawgeti(luaState, LUA_REGISTRYINDEX, ref);
+			Lua::pushBoolean(luaState, success);
+			const auto env = Lua::getScriptEnv();
+			env->setScriptId(scriptId, &g_luaEnvironment());
+			g_luaEnvironment().callFunction(1);
+
+			luaL_unref(luaState, LUA_REGISTRYINDEX, ref);
+		};
+	}
+	g_botDatabaseTasks().execute(Lua::getString(L, -1), callback);
+	return 0;
+}
+
+int DBFunctions::luaDatabaseBotAsyncStoreQuery(lua_State* L) {
+	// Mirror of luaDatabaseAsyncStoreQuery targeting g_botDatabaseTasks() (bundle 6).
+	std::function<void(DBResult_ptr, bool)> callback;
+	if (lua_gettop(L) > 1) {
+		int32_t ref = luaL_ref(L, LUA_REGISTRYINDEX);
+		auto scriptId = Lua::getScriptEnv()->getScriptId();
+		callback = [ref, scriptId](const DBResult_ptr &result, bool) {
+			lua_State* luaState = g_luaEnvironment().getLuaState();
+			if (!luaState) {
+				return;
+			}
+
+			if (!Lua::reserveScriptEnv()) {
+				luaL_unref(luaState, LUA_REGISTRYINDEX, ref);
+				return;
+			}
+
+			lua_rawgeti(luaState, LUA_REGISTRYINDEX, ref);
+			if (result) {
+				lua_pushnumber(luaState, ScriptEnvironment::addResult(result));
+			} else {
+				Lua::pushBoolean(luaState, false);
+			}
+			const auto env = Lua::getScriptEnv();
+			env->setScriptId(scriptId, &g_luaEnvironment());
+			g_luaEnvironment().callFunction(1);
+
+			luaL_unref(luaState, LUA_REGISTRYINDEX, ref);
+		};
+	}
+	g_botDatabaseTasks().store(Lua::getString(L, -1), callback);
+	return 0;
+}
+
 int DBFunctions::luaDatabaseStoreQuery(lua_State* L) {
-	// db.storeQuery(query)
 	if (const DBResult_ptr &res = Database::getInstance().storeQuery(Lua::getString(L, -1))) {
 		lua_pushnumber(L, ScriptEnvironment::addResult(res));
 	} else {
@@ -78,14 +139,7 @@ int DBFunctions::luaDatabaseStoreQuery(lua_State* L) {
 	return 1;
 }
 
-/***
- * @function db.asyncStoreQuery
- * @param query string
- * @param callback? fun(resultId: number|false)
- * @return nil
- */
 int DBFunctions::luaDatabaseAsyncStoreQuery(lua_State* L) {
-	// db.asyncStoreQuery(query[, callback])
 	std::function<void(DBResult_ptr, bool)> callback;
 	if (lua_gettop(L) > 1) {
 		int32_t ref = luaL_ref(L, LUA_REGISTRYINDEX);
@@ -119,26 +173,22 @@ int DBFunctions::luaDatabaseAsyncStoreQuery(lua_State* L) {
 }
 
 int DBFunctions::luaDatabaseEscapeString(lua_State* L) {
-	// db.escapeString(value)
 	Lua::pushString(L, Database::getInstance().escapeString(Lua::getString(L, -1)));
 	return 1;
 }
 
 int DBFunctions::luaDatabaseEscapeBlob(lua_State* L) {
-	// db.escapeBlob(value, length)
 	const uint32_t length = Lua::getNumber<uint32_t>(L, 2);
 	Lua::pushString(L, Database::getInstance().escapeBlob(Lua::getString(L, 1).c_str(), length));
 	return 1;
 }
 
 int DBFunctions::luaDatabaseLastInsertId(lua_State* L) {
-	// db.lastInsertId()
 	lua_pushnumber(L, Database::getInstance().getLastInsertId());
 	return 1;
 }
 
 int DBFunctions::luaDatabaseTableExists(lua_State* L) {
-	// db.tableExists(tableName)
 	Lua::pushBoolean(L, DatabaseManager::tableExists(Lua::getString(L, -1)));
 	return 1;
 }

@@ -14,7 +14,7 @@
 #include "lua/functions/lua_functions_loader.hpp"
 
 void ZoneFunctions::init(lua_State* L) {
-	Lua::registerSharedClass<Zone>(L, "", ZoneFunctions::luaZoneCreate);
+	Lua::registerSharedClass(L, "Zone", "", ZoneFunctions::luaZoneCreate);
 	Lua::registerMetaMethod(L, "Zone", "__eq", ZoneFunctions::luaZoneCompare);
 
 	Lua::registerMethod(L, "Zone", "getName", ZoneFunctions::luaZoneGetName);
@@ -50,7 +50,8 @@ int ZoneFunctions::luaZoneCreate(lua_State* L) {
 	if (!zone) {
 		zone = Zone::addZone(name);
 	}
-	Lua::pushSharedUserdata<Zone>(L, zone);
+	Lua::pushUserdata<Zone>(L, zone);
+	Lua::setMetatable(L, -1, "Zone");
 	return 1;
 }
 
@@ -327,7 +328,8 @@ int ZoneFunctions::luaZoneGetByName(lua_State* L) {
 		lua_pushnil(L);
 		return 1;
 	}
-	Lua::pushSharedUserdata<Zone>(L, zone);
+	Lua::pushUserdata<Zone>(L, zone);
+	Lua::setMetatable(L, -1, "Zone");
 	return 1;
 }
 
@@ -344,7 +346,8 @@ int ZoneFunctions::luaZoneGetByPosition(lua_State* L) {
 	lua_createtable(L, static_cast<int>(zones.size()), 0);
 	for (const auto &zone : zones) {
 		index++;
-		Lua::pushSharedUserdata<Zone>(L, zone);
+		Lua::pushUserdata<Zone>(L, zone);
+		Lua::setMetatable(L, -1, "Zone");
 		lua_rawseti(L, -2, index);
 	}
 	return 1;
@@ -357,7 +360,8 @@ int ZoneFunctions::luaZoneGetAll(lua_State* L) {
 	int index = 0;
 	for (const auto &zone : zones) {
 		index++;
-		Lua::pushSharedUserdata<Zone>(L, zone);
+		Lua::pushUserdata<Zone>(L, zone);
+		Lua::setMetatable(L, -1, "Zone");
 		lua_rawseti(L, -2, index);
 	}
 	return 1;

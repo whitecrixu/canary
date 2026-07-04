@@ -1,13 +1,6 @@
 -- Advanced NPC System by Jiddo
 
 if NpcHandler == nil then
-	-- Fallback for load-order issues: npc_handler may be loaded before npc_dialog.
-	NpcDialog = NpcDialog or {}
-	NpcDialog.add = NpcDialog.add or function() end
-	NpcDialog.remove = NpcDialog.remove or function() end
-	NpcDialog.clear = NpcDialog.clear or function() end
-	NpcDialog.sendWindow = NpcDialog.sendWindow or function() end
-
 	-- Constant talkdelay behaviors.
 	TALKDELAY_NONE = 0 -- No talkdelay. Npc will reply immedeatly.
 	TALKDELAY_ONTHINK = 1 -- Talkdelay handled through the onThink callback function. (Default)
@@ -393,7 +386,7 @@ if NpcHandler == nil then
 				local msg = self:getMessage(MESSAGE_FAREWELL)
 				local playerName = player:getName() or -1
 				local parseInfo = { [TAG_PLAYERNAME] = playerName }
-				self:resetNpc(npc, player)
+				self:resetNpc(player)
 				msg = self:parseMessage(msg, parseInfo)
 				self:say(msg, npc, player)
 				self:removeInteraction(npc, player)
@@ -443,14 +436,6 @@ if NpcHandler == nil then
 	-- Handles onSay events. If you with to handle this yourself, please use the CALLBACK_ON_SAY callback.
 	function NpcHandler:onSay(npc, player, msgtype, msg)
 		local playerId = player:getId()
-		if type(msg) == "string" and msg:lower() == "hi" and NpcDialogProfessionByName then
-			local profession = NpcDialogProfessionByName[npc:getName():lower()]
-			if profession == "king" then
-				msg = "hail king"
-			elseif profession == "queen" then
-				msg = "hail queen"
-			end
-		end
 		local callback = self:getCallback(CALLBACK_ON_SAY)
 		if callback == nil or callback(npc, player, msgtype, msg) then
 			if self:processModuleCallback(CALLBACK_ON_SAY, npc, player, msgtype, msg) then
@@ -536,10 +521,8 @@ if NpcHandler == nil then
 		if npc:isInTalkRange(Player(player):getPosition(), self:getTalkRange()) then
 			if not self:checkInteraction(npc, player) then
 				self:greet(npc, player, message)
+				return true
 			end
-			NpcDialog.add(player, npc:getId())
-			NpcDialog.sendWindow(player)
-			return true
 		end
 	end
 
@@ -547,8 +530,6 @@ if NpcHandler == nil then
 	function NpcHandler:onFarewell(npc, player)
 		if self:checkInteraction(npc, player) then
 			self:unGreet(npc, player)
-			NpcDialog.remove(player, npc:getId())
-			NpcDialog.sendWindow(player)
 			return true
 		end
 	end
@@ -582,9 +563,7 @@ if NpcHandler == nil then
 				elseif message ~= "" then
 					npc:sayWithDelay(npc:getId(), message, TALKTYPE_SAY, self.talkDelay, self.eventDelayedSay)
 				end
-				NpcDialog.remove(player, npc:getId())
-				NpcDialog.sendWindow(player)
-				self:resetNpc(npc, player)
+				self:resetNpc(player)
 				self:removeInteraction(npc, player)
 			end
 		end
@@ -597,13 +576,9 @@ if NpcHandler == nil then
 
 	-- Resets the npc into its initial state (in regard of the keywordhandler).
 	--	All modules are also receiving a reset call through their callbackOnModuleReset function.
-	function NpcHandler:resetNpc(npc, player)
+	function NpcHandler:resetNpc(player)
 		if self:processModuleCallback(CALLBACK_MODULE_RESET) then
 			self.keywordHandler:reset(player)
-			if npc then
-				NpcDialog.remove(player, npc:getId())
-				NpcDialog.sendWindow(player)
-			end
 		end
 	end
 

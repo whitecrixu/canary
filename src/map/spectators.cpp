@@ -63,9 +63,9 @@ bool Spectators::checkCache(const SpectatorsCache::FloorData &specData, bool onl
 			     && centerPos.x - specPos.x <= maxRangeX
 			     && centerPos.y - specPos.y <= maxRangeY
 			     && (multifloor || specPos.z == centerPos.z)
-			     && ((onlyPlayers && creature->getPlayerRaw())
-			         || (onlyMonsters && creature->getMonsterRaw())
-			         || (onlyNpcs && creature->getNpcRaw())))
+			     && ((onlyPlayers && creature->getPlayer())
+			         || (onlyMonsters && creature->getMonster())
+			         || (onlyNpcs && creature->getNpc())))
 			    || (!onlyPlayers && !onlyMonsters && !onlyNpcs)) {
 				spectators.emplace_back(creature);
 			}
@@ -240,7 +240,7 @@ Spectators Spectators::excludeMaster() const {
 	specs.creatures.reserve(creatures.size());
 
 	for (const auto &c : creatures) {
-		if (c->getMonsterRaw() != nullptr && !c->getMaster()) {
+		if (c->getMonster() != nullptr && !c->getMaster()) {
 			specs.insert(c);
 		}
 	}
@@ -257,8 +257,7 @@ Spectators Spectators::excludePlayerMaster() const {
 	specs.creatures.reserve(creatures.size());
 
 	for (const auto &c : creatures) {
-		const auto &master = c->getMaster();
-		if ((c->getMonsterRaw() != nullptr && !master) || (!master || !master->getPlayerRaw())) {
+		if ((c->getMonster() != nullptr && !c->getMaster()) || (!c->getMaster() || !c->getMaster()->getPlayer())) {
 			specs.insert(c);
 		}
 	}
@@ -271,11 +270,11 @@ Spectators Spectators::filter(bool onlyPlayers, bool onlyMonsters, bool onlyNpcs
 	specs.creatures.reserve(creatures.size());
 
 	for (const auto &c : creatures) {
-		if (onlyPlayers && c->getPlayerRaw() != nullptr) {
+		if (onlyPlayers && c->getPlayer() != nullptr) {
 			specs.insert(c);
-		} else if (onlyMonsters && c->getMonsterRaw() != nullptr) {
+		} else if (onlyMonsters && c->getMonster() != nullptr) {
 			specs.insert(c);
-		} else if (onlyNpcs && c->getNpcRaw() != nullptr) {
+		} else if (onlyNpcs && c->getNpc() != nullptr) {
 			specs.insert(c);
 		}
 	}

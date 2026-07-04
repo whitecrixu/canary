@@ -132,9 +132,7 @@ void Weapon::configureWeapon(const ItemType &it) {
 	id = it.id;
 }
 
-int32_t Weapon::playerWeaponCheck(const std::shared_ptr<Player> &player, const std::shared_ptr<Creature> &target, int32_t shootRange) const {
-	shootRange += player->weaponProficiency().getStat(WeaponProficiencyBonus_t::ATTACK_RANGE);
-
+int32_t Weapon::playerWeaponCheck(const std::shared_ptr<Player> &player, const std::shared_ptr<Creature> &target, uint8_t shootRange) const {
 	const Position &playerPos = player->getPosition();
 	const Position &targetPos = target->getPosition();
 	if (playerPos.z != targetPos.z) {
@@ -360,6 +358,11 @@ void Weapon::onUsedWeapon(const std::shared_ptr<Player> &player, const std::shar
 		player->changeSoul(-static_cast<int32_t>(soul));
 	}
 
+	// Bot players never consume ammo, charges, or break weapons
+	if (player->isBotPlayer()) {
+		return;
+	}
+
 	bool skipRemoveBeginningWeaponAmmo = !g_configManager().getBoolean(REMOVE_BEGINNING_WEAPON_AMMO) && (item->getName() == "arrow" || item->getName() == "bolt" || item->getName() == "spear");
 	if (!skipRemoveBeginningWeaponAmmo && breakChance != 0 && uniform_random(1, 100) <= breakChance) {
 		Weapon::decrementItemCount(item);
@@ -472,7 +475,7 @@ bool Weapon::calculateSkillFormula(const std::shared_ptr<Player> &player, int32_
 		attackValue += elementAttack;
 	}
 
-	if (useCharges) {
+	if (useCharges && !player->isBotPlayer()) {
 		const auto charges = tool->getAttribute<uint16_t>(ItemAttribute_t::CHARGES);
 		if (charges != 0) {
 			g_game().transformItem(tool, tool->getID(), charges - 1);
@@ -643,11 +646,10 @@ int16_t WeaponMelee::getElementDamageValue() const {
 }
 
 int32_t WeaponMelee::getWeaponDamage(const std::shared_ptr<Player> &player, const std::shared_ptr<Creature> &, const std::shared_ptr<Item> &item, bool maxDamage /*= false*/) const {
-	const auto proficiencyAttack = player->weaponProficiency().getStat(WeaponProficiencyBonus_t::ATTACK_DAMAGE);
 	const int32_t attackSkill = player->getWeaponSkill(item);
 	const int32_t physicalAttack = std::max<int32_t>(0, item->getAttack());
 	const int32_t elementalAttack = getElementDamageValue();
-	const int32_t combinedAttack = physicalAttack + elementalAttack + proficiencyAttack;
+	const int32_t combinedAttack = physicalAttack + elementalAttack;
 
 	const float attackFactor = player->getAttackFactor();
 	const uint32_t level = player->getLevel();
@@ -828,7 +830,6 @@ bool WeaponDistance::useWeapon(const std::shared_ptr<Player> &player, const std:
 		const auto &bow = player->getWeapon(true);
 		if (bow && bow->getHitChance() != 0) {
 			chance += bow->getHitChance();
-			chance += player->weaponProficiency().getStat(WeaponProficiencyBonus_t::RANGED_HIT_CHANCE);
 		}
 	}
 
@@ -898,7 +899,6 @@ int16_t WeaponDistance::getElementDamageValue() const {
 
 int32_t WeaponDistance::getWeaponDamage(const std::shared_ptr<Player> &player, const std::shared_ptr<Creature> &target, const std::shared_ptr<Item> &item, bool maxDamage /*= false*/) const {
 	int32_t attackValue = item->getAttack();
-	attackValue += player->weaponProficiency().getStat(WeaponProficiencyBonus_t::ATTACK_DAMAGE);
 	bool hasElement = false;
 
 	if (player && item && item->getWeaponType() == WEAPON_AMMO) {

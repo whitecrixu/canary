@@ -33,11 +33,11 @@ namespace it_account_repo_db {
 
 	InMemoryLogger* AccountRepositoryDBTest::logger = nullptr;
 
-	inline time_t createAccount(Database &db, const TestIds &ids, const std::string &password = "") {
+	inline void createAccount(Database &db, const TestIds &ids, const std::string &password = "") {
 		if (AccountRepositoryDBTest::logger) {
 			AccountRepositoryDBTest::logger->logs.clear();
 		}
-		auto lastDay = getTimeNow() + 11 * 86400 + 3600;
+		auto lastDay = getTimeNow() + 11 * 86400;
 		if (!db.executeQuery(fmt::format("INSERT INTO `accounts` "
 		                                 "(`id`, `name`, `email`, `password`, `type`, `premdays`, `lastday`, `premdays_purchased`, `creation`) "
 		                                 "VALUES({}, '{}', '{}', '{}', 3, 11, {}, 11, 42183281)",
@@ -47,8 +47,7 @@ namespace it_account_repo_db {
 					std::cerr << "DB Error (accounts): " << log.message << std::endl;
 				}
 			}
-			ADD_FAILURE() << "Failed to insert account";
-			return lastDay;
+			FAIL() << "Failed to insert account";
 		}
 
 		if (!db.executeQuery(fmt::format("INSERT INTO `account_sessions` (`id`, `account_id`, `expires`) "
@@ -59,8 +58,7 @@ namespace it_account_repo_db {
 					std::cerr << "DB Error (account_sessions): " << log.message << std::endl;
 				}
 			}
-			ADD_FAILURE() << "Failed to insert account_sessions";
-			return lastDay;
+			FAIL() << "Failed to insert account_sessions";
 		}
 
 		if (!db.executeQuery(fmt::format("INSERT INTO `players` (`name`, `account_id`, `conditions`, `deletion`) "
@@ -71,30 +69,19 @@ namespace it_account_repo_db {
 					std::cerr << "DB Error (players): " << log.message << std::endl;
 				}
 			}
-			ADD_FAILURE() << "Failed to insert players";
-			return lastDay;
+			FAIL() << "Failed to insert players";
 		}
-
-		return lastDay;
 	}
 
-	inline void assertAccountLoad(const AccountInfo &acc, const TestIds &ids, time_t expectedLastDay) {
+	inline void assertAccountLoad(const AccountInfo &acc, const TestIds &ids) {
 		EXPECT_EQ(ids.id, acc.id);
 		EXPECT_EQ(AccountType::ACCOUNT_TYPE_SENIORTUTOR, acc.accountType);
 		EXPECT_EQ(11, acc.premiumRemainingDays);
-		EXPECT_NEAR(static_cast<double>(acc.premiumLastDay), static_cast<double>(expectedLastDay), 60.0);
+		EXPECT_NEAR(static_cast<double>(acc.premiumLastDay), static_cast<double>(getTimeNow() + 11 * 86400), 60.0);
 		EXPECT_EQ(0u, acc.players.size());
 		EXPECT_FALSE(acc.oldProtocol);
 		EXPECT_EQ(11, acc.premiumDaysPurchased);
 		EXPECT_NEAR(static_cast<double>(acc.creationTime), 42183281.0, 1.0);
-	}
-
-	inline void assertSessionLoad(const TestIds &ids, time_t expectedLastDay, int64_t expectedSessionExpires) {
-		AccountRepositoryDB accRepo {};
-		auto acc = std::make_unique<AccountInfo>();
-		ASSERT_TRUE(accRepo.loadBySession(ids.name, acc));
-		assertAccountLoad(*acc, ids, expectedLastDay);
-		EXPECT_EQ(expectedSessionExpires, acc->sessionExpires);
 	}
 
 	TEST_F(AccountRepositoryDBTest, LoadByID) {
@@ -102,10 +89,10 @@ namespace it_account_repo_db {
 		databaseTest(db, [&db] {
 			AccountRepositoryDB accRepo {};
 			auto ids = getTestIds();
-			auto expectedLastDay = createAccount(db, ids);
+			createAccount(db, ids);
 			auto acc = std::make_unique<AccountInfo>();
 			ASSERT_TRUE(accRepo.loadByID(ids.id, acc));
-			assertAccountLoad(*acc, ids, expectedLastDay);
+			assertAccountLoad(*acc, ids);
 			EXPECT_EQ(0, acc->sessionExpires);
 		})();
 	}
@@ -115,10 +102,10 @@ namespace it_account_repo_db {
 		databaseTest(db, [&db] {
 			AccountRepositoryDB accRepo {};
 			auto ids = getTestIds();
-			auto expectedLastDay = createAccount(db, ids);
+			ASSERT_NO_FATAL_FAILURE(createAccount(db, ids));
 			auto acc = std::make_unique<AccountInfo>();
 			ASSERT_TRUE(accRepo.loadByEmailOrName(false, ids.email, acc));
-			assertAccountLoad(*acc, ids, expectedLastDay);
+			assertAccountLoad(*acc, ids);
 			EXPECT_EQ(0, acc->sessionExpires);
 		})();
 	}
@@ -128,39 +115,11 @@ namespace it_account_repo_db {
 		databaseTest(db, [&db] {
 			AccountRepositoryDB accRepo {};
 			auto ids = getTestIds();
-			auto expectedLastDay = createAccount(db, ids);
+			ASSERT_NO_FATAL_FAILURE(createAccount(db, ids));
 			auto acc = std::make_unique<AccountInfo>();
 			ASSERT_TRUE(accRepo.loadBySession(ids.name, acc));
-			assertAccountLoad(*acc, ids, expectedLastDay);
+			assertAccountLoad(*acc, ids);
 			EXPECT_EQ(1337, acc->sessionExpires);
-		})();
-	}
-
-	TEST_F(AccountRepositoryDBTest, LoadBySessionWithSHA256SessionId) {
-		auto &db = g_database();
-		databaseTest(db, [&db] {
-			auto ids = getTestIds();
-			auto expectedLastDay = createAccount(db, ids);
-			ASSERT_TRUE(db.executeQuery(fmt::format(
-				"UPDATE `account_sessions` SET `id` = {} WHERE `account_id` = {}",
-				db.escapeString(transformToSHA256(ids.name)),
-				ids.id
-			)));
-			assertSessionLoad(ids, expectedLastDay, 1337);
-		})();
-	}
-
-	TEST_F(AccountRepositoryDBTest, LoadBySessionPrefersSHA256SessionId) {
-		auto &db = g_database();
-		databaseTest(db, [&db] {
-			auto ids = getTestIds();
-			auto expectedLastDay = createAccount(db, ids);
-			ASSERT_TRUE(db.executeQuery(fmt::format(
-				"INSERT INTO `account_sessions` (`id`, `account_id`, `expires`) VALUES ({}, {}, 7331)",
-				db.escapeString(transformToSHA256(ids.name)),
-				ids.id
-			)));
-			assertSessionLoad(ids, expectedLastDay, 7331);
 		})();
 	}
 

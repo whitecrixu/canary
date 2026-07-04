@@ -22,7 +22,6 @@ class Zone;
 class Cylinder;
 class Item;
 class ItemType;
-class Player;
 
 using CreatureVector = std::vector<std::shared_ptr<Creature>>;
 using ItemVector = std::vector<std::shared_ptr<Item>>;
@@ -42,7 +41,6 @@ public:
 	using ItemVector::push_back;
 	using ItemVector::rbegin;
 	using ItemVector::rend;
-	using ItemVector::reserve;
 	using ItemVector::reverse_iterator;
 	using ItemVector::size;
 	using ItemVector::value_type;
@@ -181,11 +179,11 @@ public:
 	void addZone(const std::shared_ptr<Zone> &zone);
 	void clearZones();
 
-	[[nodiscard]] const std::unordered_set<std::shared_ptr<Zone>> &getZones() const {
+	auto getZones() const {
 		return zones;
 	}
 
-	[[nodiscard]] ZoneType_t getZoneType() const {
+	ZoneType_t getZoneType() const {
 		if (hasFlag(TILESTATE_PROTECTIONZONE)) {
 			return ZONE_PROTECTION;
 		} else if (hasFlag(TILESTATE_NOPVPZONE)) {
@@ -202,7 +200,6 @@ public:
 
 	std::string getDescription(int32_t lookDistance) final;
 
-	int32_t getClientIndexOfCreature(const Player* player, const std::shared_ptr<Creature> &creature) const;
 	int32_t getClientIndexOfCreature(const std::shared_ptr<Player> &player, const std::shared_ptr<Creature> &creature) const;
 	int32_t getStackposOfCreature(const std::shared_ptr<Player> &player, const std::shared_ptr<Creature> &creature) const;
 	int32_t getStackposOfItem(const std::shared_ptr<Player> &player, const std::shared_ptr<Item> &item) const;
@@ -239,10 +236,6 @@ public:
 	void internalAddThing(uint32_t index, const std::shared_ptr<Thing> &thing) override;
 
 	const Position &getPosition() final {
-		return tilePos;
-	}
-
-	const Position &getPosition() const final {
 		return tilePos;
 	}
 

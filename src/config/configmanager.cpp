@@ -41,6 +41,7 @@ bool ConfigManager::load() {
 	// Info that must be loaded one time (unless we reset the modules involved)
 	if (!loaded) {
 		loadBoolConfig(L, BIND_ONLY_GLOBAL_ADDRESS, "bindOnlyGlobalAddress", false);
+		loadBoolConfig(L, BOT_DENSITY_CAP_ENABLED, "botDensityCapEnabled", true);
 		loadBoolConfig(L, DISABLE_LEGACY_RAIDS, "disableLegacyRaids", false);
 		loadBoolConfig(L, OLD_PROTOCOL, "allowOldProtocol", true);
 		loadBoolConfig(L, OPTIMIZE_DATABASE, "startupDatabaseOptimization", true);
@@ -52,11 +53,149 @@ bool ConfigManager::load() {
 		loadFloatConfig(L, HOUSE_PRICE_RENT_MULTIPLIER, "housePriceRentMultiplier", 1.0);
 		loadFloatConfig(L, HOUSE_RENT_RATE, "houseRentRate", 1.0);
 
+		loadIntConfig(L, BOT_DENSITY_ANCHOR_CLUSTER_RADIUS, "botDensityAnchorClusterRadius", 50);
+		// Ring limits are percentages of botPlayersOnline, truncated to whole bots
+		// in BotEngine (pctOfBotTotal). At 500 bots: 0.6/2.0/3.0 -> 3/10/15.
+		loadFloatConfig(L, BOT_DENSITY_CAP_INNER_LIMIT_PCT, "botDensityCapInnerLimitPct", 0.6);
+		loadIntConfig(L, BOT_DENSITY_CAP_INNER_RADIUS, "botDensityCapInnerRadius", 7);
+		loadFloatConfig(L, BOT_DENSITY_CAP_MID_LIMIT_PCT, "botDensityCapMidLimitPct", 2.0);
+		loadIntConfig(L, BOT_DENSITY_CAP_MID_RADIUS, "botDensityCapMidRadius", 50);
+		loadFloatConfig(L, BOT_DENSITY_CAP_OUTER_LIMIT_PCT, "botDensityCapOuterLimitPct", 3.0);
+		loadIntConfig(L, BOT_DENSITY_CAP_OUTER_RADIUS, "botDensityCapOuterRadius", 100);
+		loadIntConfig(L, BOT_PLAYERS_ONLINE, "botPlayersOnline", 200);
+
+		// ---- Bot Liveness Pack (see BOT_SYSTEM_DOCS.md) ----
+		// POI weights — relative weight when bots roll which POI to walk to.
+		// NPC + SHOP rebalanced UP (3->8, 5->10) to make hubs visibly populated.
+		loadIntConfig(L, BOT_POI_WEIGHT_DEPOT,            "botPoiWeightDepot",           40);
+		loadIntConfig(L, BOT_POI_WEIGHT_DEPOT_OUTSIDE,    "botPoiWeightDepotOutside",    20);
+		loadIntConfig(L, BOT_POI_WEIGHT_TEMPLE,           "botPoiWeightTemple",          10);
+		loadIntConfig(L, BOT_POI_WEIGHT_BOAT,             "botPoiWeightBoat",            20);
+		loadIntConfig(L, BOT_POI_WEIGHT_SHOP,             "botPoiWeightShop",            10);
+		loadIntConfig(L, BOT_POI_WEIGHT_NPC,              "botPoiWeightNpc",              8);
+		loadIntConfig(L, BOT_POI_WEIGHT_ADVENTURER_STONE, "botPoiWeightAdventurerStone", 10);
+		// Top-level activity reroll weights (must sum to 100). HUNT trimmed -10 to feed POI +10.
+		loadIntConfig(L, BOT_REROLL_WEIGHT_IDLE,   "botRerollWeightIdle",   15);
+		loadIntConfig(L, BOT_REROLL_WEIGHT_POI,    "botRerollWeightPoi",    35);
+		loadIntConfig(L, BOT_REROLL_WEIGHT_HUNT,   "botRerollWeightHunt",   25);
+		loadIntConfig(L, BOT_REROLL_WEIGHT_TRAVEL, "botRerollWeightTravel", 25);
+		// Player-proximity weighting (2026-06-15): bias HIBERNATED bots' next task/location
+		// toward routes/towns near real players (or cast-watched bots) so the virtual sim
+		// funnels ambient traffic toward players. Balanced defaults; set botProxTravelCatBonus=0
+		// to disable just the travel-propensity nudge while keeping destination/POI/hunt bias.
+		loadBoolConfig(L, BOT_PROX_WEIGHT_ENABLED,  "botProxWeightEnabled",  true);
+		loadBoolConfig(L, BOT_PROX_WEIGHT_AWAKE,    "botProxWeightAwake",    false);
+		loadIntConfig(L, BOT_PROX_BASELINE_WEIGHT,  "botProxBaselineWeight",   1);
+		loadIntConfig(L, BOT_PROX_NEAR_TILES,       "botProxNearTiles",      100);
+		loadIntConfig(L, BOT_PROX_MID_TILES,        "botProxMidTiles",       350);
+		loadIntConfig(L, BOT_PROX_BONUS_NEAR,       "botProxBonusNear",       18);
+		loadIntConfig(L, BOT_PROX_BONUS_MID,        "botProxBonusMid",         6);
+		loadIntConfig(L, BOT_PROX_SAMPLE_CAP,       "botProxSampleCap",        8);
+		loadIntConfig(L, BOT_PROX_TRAVEL_CAT_BONUS, "botProxTravelCatBonus",  25);
+		// Dwell durations (seconds). POI dwell widened from [120,600] -> [180,900] so
+		// bots linger long enough to be noticed at hubs.
+		loadIntConfig(L, BOT_REROLL_COOLDOWN_SEC,   "botRerollCooldownSec",    30);
+		loadIntConfig(L, BOT_DWELL_REROLL_MIN_SEC,  "botDwellRerollMinSec",    60);
+		loadIntConfig(L, BOT_DWELL_REROLL_MAX_SEC,  "botDwellRerollMaxSec",   300);
+		loadIntConfig(L, BOT_DWELL_POI_MIN_SEC,     "botDwellPoiMinSec",      180);
+		loadIntConfig(L, BOT_DWELL_POI_MAX_SEC,     "botDwellPoiMaxSec",      900);
+		loadIntConfig(L, BOT_DWELL_NPC_MIN_SEC,     "botDwellNpcMinSec",       15);
+		loadIntConfig(L, BOT_DWELL_NPC_MAX_SEC,     "botDwellNpcMaxSec",       60);
+		loadIntConfig(L, BOT_DWELL_POST_TRAVEL_SEC, "botDwellPostTravelSec",   60);
+		// Hunt session duration (2026-06-09): moved from constexpr HUNT_TIME_MIN/MAX in
+		// bot_engine.cpp to config so it can be tuned without a rebuild. Defaults 1200/2400
+		// (20-40 min) replace the previous 1800/10800 (30 min - 3h) which kept bots stuck
+		// underground hunting for hours and starved city visibility.
+		loadIntConfig(L, BOT_HUNT_TIME_MIN_SEC,    "botHuntTimeMinSec",    1200);
+		loadIntConfig(L, BOT_HUNT_TIME_MAX_SEC,    "botHuntTimeMaxSec",    2400);
+		// AdvStone dwells. Chest extended (mode==1) so bots visibly linger at reward chest.
+		loadIntConfig(L, BOT_ADV_STONE_DWELL_IDLE_MIN_SEC,  "botAdvStoneDwellIdleMinSec",   60);
+		loadIntConfig(L, BOT_ADV_STONE_DWELL_IDLE_MAX_SEC,  "botAdvStoneDwellIdleMaxSec",  300);
+		loadIntConfig(L, BOT_ADV_STONE_DWELL_CHEST_MIN_SEC, "botAdvStoneDwellChestMinSec", 300);
+		loadIntConfig(L, BOT_ADV_STONE_DWELL_CHEST_MAX_SEC, "botAdvStoneDwellChestMaxSec", 1200);
+		loadIntConfig(L, BOT_ADV_STONE_DWELL_DUMMY_MIN_SEC, "botAdvStoneDwellDummyMinSec", 180);
+		loadIntConfig(L, BOT_ADV_STONE_DWELL_DUMMY_MAX_SEC, "botAdvStoneDwellDummyMaxSec", 1800);
+		// Max % of botPlayersOnline concurrently in chest/dummy sub-activities
+		// (truncated to whole bots; 2.5% of 500 -> 12). Enforced at the mode roll
+		// in selectAdvStoneSubActivity — capped trips demote to waypoint idling.
+		loadFloatConfig(L, BOT_ADV_STONE_CHEST_DUMMY_CAP_PCT, "botAdvStoneChestDummyCapPct", 2.5);
+		// Mount activation chance (% per activation). Dead-code at 30 pre-Phase-A;
+		// becomes effective once player_storage grant lands.
+		loadIntConfig(L, BOT_MOUNT_CHANCE_PCT, "botMountChancePct", 60);
+		// Crowd cap: skip POI selection if >= count bots already within radius tiles.
+		// Exempt at AdvStone island (chest/dummy/idle legitimately cluster).
+		loadIntConfig(L, BOT_POI_CROWD_CAP_COUNT,  "botPoiCrowdCapCount",  3);
+		loadIntConfig(L, BOT_POI_CROWD_CAP_RADIUS, "botPoiCrowdCapRadius", 2);
+		// Idle turn-in-place via Game::internalCreatureTurn (same as spell-cast).
+		loadIntConfig(L, BOT_TURN_IN_PLACE_CHANCE_PCT,    "botTurnInPlaceChancePct",    20);
+		loadIntConfig(L, BOT_TURN_IN_PLACE_INTERVAL_TICKS, "botTurnInPlaceIntervalTicks", 25);
+		// Mid-walk pause (also applies to city routes; gated against combat/FC/hunt-target).
+		// Hard cap per route limits clustering; commit ead32465d removed an earlier flat
+		// LOITER_CHANCE=40 because mid-walk pauses looked unnatural — these values are
+		// tuned to be qualitatively different (lower probability, shorter cap).
+		loadIntConfig(L, BOT_WALK_PAUSE_CHANCE_PCT,    "botWalkPauseChancePct",     2);
+		loadIntConfig(L, BOT_WALK_PAUSE_MIN_MS,        "botWalkPauseMinMs",       400);
+		loadIntConfig(L, BOT_WALK_PAUSE_MAX_MS,        "botWalkPauseMaxMs",      5000);
+		loadIntConfig(L, BOT_WALK_PAUSE_MAX_PER_ROUTE, "botWalkPauseMaxPerRoute",   3);
+		// Observed-tier mid-walk pause: longer, more frequent, personality-gated pauses
+		// that fire ONLY when a real player or cast-watched bot is on screen. Applies in
+		// IDLE/DWELLING/TRAVELING only (never hunting/patrolling/party/combat). See botStartAutoWalk.
+		loadIntConfig(L, BOT_WALK_PAUSE_OBSERVED_CHANCE_PCT,    "botWalkPauseObservedChancePct",      12);
+		loadIntConfig(L, BOT_WALK_PAUSE_OBSERVED_MIN_MS,        "botWalkPauseObservedMinMs",         500);
+		loadIntConfig(L, BOT_WALK_PAUSE_OBSERVED_MAX_MS,        "botWalkPauseObservedMaxMs",       20000);
+		loadIntConfig(L, BOT_WALK_PAUSE_OBSERVED_MAX_PER_ROUTE, "botWalkPauseObservedMaxPerRoute",     8);
+		// Idle litter drop (drop-only). Chance rolled once per genuine stop, scaled by
+		// per-bot fidgetiness and clamped to 95%, capped at one drop per awake session.
+		// Item pool = any NPC-buyable item (ItemType.buyPrice) below botFidgetMaxItemValueGp.
+		// (BOT_FIDGET_INTERVAL_MIN/MAX_SEC are now unused — kept to not break existing config.)
+		loadIntConfig(L, BOT_FIDGET_CHANCE_PCT,        "botFidgetChancePct",        38);
+		loadIntConfig(L, BOT_FIDGET_INTERVAL_MIN_SEC,  "botFidgetIntervalMinSec",   60);
+		loadIntConfig(L, BOT_FIDGET_INTERVAL_MAX_SEC,  "botFidgetIntervalMaxSec",  300);
+		loadIntConfig(L, BOT_FIDGET_MAX_ITEM_VALUE_GP, "botFidgetMaxItemValueGp", 1000);
+		// ---- Gang-PK alpha-strike (see .claude/tmp_gang_pk_pzblock_plan.md) ----
+		// A few idle bots standing in a PZ jump an exposed victim just outside it: they stage
+		// at the PZ edge, step out together, then surround + magic-wall-box the victim and burst
+		// it with single-target nukes (never AoE -> no collateral). Very rare, observer-gated,
+		// bounded by the existing 5% skull cap. Odds are 1-in-N per eligible scan.
+		loadBoolConfig(L, BOT_GANG_ENABLE,           "botGangEnable",           true);
+		loadBoolConfig(L, BOT_GANG_REQUIRE_OBSERVER, "botGangRequireObserver",  true);
+		loadBoolConfig(L, BOT_GANG_TARGET_PLAYERS,   "botGangTargetPlayers",    true);
+		loadIntConfig(L, BOT_GANG_MIN_SIZE,          "botGangMinSize",             2);
+		loadIntConfig(L, BOT_GANG_MAX_SIZE,          "botGangMaxSize",             4);
+		loadIntConfig(L, BOT_GANG_RECRUIT_RADIUS,    "botGangRecruitRadius",       5);
+		loadIntConfig(L, BOT_GANG_VICTIM_BAND,       "botGangVictimBand",          3);
+		loadIntConfig(L, BOT_GANG_STAGE_WINDOW_MS,   "botGangStageWindowMs",    2500);
+		loadIntConfig(L, BOT_GANG_SCAN_COOLDOWN_MS,  "botGangScanCooldownMs",   4000);
+		loadIntConfig(L, BOT_GANG_ODDS_VS_PLAYER,    "botGangOddsVsPlayer",       33);
+		loadIntConfig(L, BOT_GANG_ODDS_VS_BOT,       "botGangOddsVsBot",         200);
+		loadIntConfig(L, BOT_GANG_WALL_CHANCE_PCT,   "botGangWallChancePct",      80);
+		loadIntConfig(L, BOT_GANG_PARALYZE_CHANCE_PCT, "botGangParalyzeChancePct", 60);
+		loadIntConfig(L, BOT_GANG_VICTIM_COOLDOWN_SEC, "botGangVictimCooldownSec", 86400);
+		// ---- PZ-blocked roaming ----
+		// While genuinely pz-locked (real 60s), a bot can't enter depot/temple/boat PZ. It stops
+		// rolling HUNT/TRAVEL and instead mills around non-PZ tiles (the depot-roam behavior,
+		// anchored anywhere) until the lock clears.
+		loadBoolConfig(L, BOT_PZROAM_ENABLE,            "botPzRoamEnable",        true);
+		loadIntConfig(L, BOT_PZROAM_INTERVAL_MIN_SEC,   "botPzRoamIntervalMinSec",  20);
+		loadIntConfig(L, BOT_PZROAM_INTERVAL_MAX_SEC,   "botPzRoamIntervalMaxSec",  60);
+		loadIntConfig(L, BOT_PZROAM_STAY_PCT,           "botPzRoamStayPct",         40);
+		// Local chat cadence scaled per-bot by personalitySeed.chattyness() (4-bit field).
+		loadIntConfig(L, BOT_CHAT_COOLDOWN_MIN_MS, "botChatCooldownMinMs",  30000);
+		loadIntConfig(L, BOT_CHAT_COOLDOWN_MAX_MS, "botChatCooldownMaxMs", 300000);
+		// World Chat (channel 3) — global chitchat. Per-bot 20-40 min => ~1 post/min server-wide at 30 awake.
+		loadIntConfig(L, BOT_WORLD_CHAT_INTERVAL_MIN_MS, "botWorldChatIntervalMinMs", 1200000);
+		loadIntConfig(L, BOT_WORLD_CHAT_INTERVAL_MAX_MS, "botWorldChatIntervalMaxMs", 2400000);
+		// Advertising (channel 5) — trade offers. Server-side script enforces 2-min hard cap.
+		loadIntConfig(L, BOT_ADVERTISING_INTERVAL_MIN_MS, "botAdvertisingIntervalMinMs", 300000);
+		loadIntConfig(L, BOT_ADVERTISING_INTERVAL_MAX_MS, "botAdvertisingIntervalMaxMs", 600000);
+		// Anti-repeat ring size (Playerbots-style; Playerbots doesn't have one — their bots visibly repeat).
+		loadIntConfig(L, BOT_CHAT_ANTI_REPEAT_RING_SIZE, "botChatAntiRepeatRingSize", 8);
+		// Master chat-rate knob — scales overall chat rate without touching per-category percentages.
+		// 100 = no-op, 50 = halve, 200 = double. Per-category chance still applies on top.
+		loadIntConfig(L, BOT_CHAT_MASTER_CHANCE_PCT, "botChatMasterChancePct", 100);
 		loadIntConfig(L, DEPOT_BOXES, "depotBoxes", 20);
 		loadIntConfig(L, FREE_DEPOT_LIMIT, "freeDepotLimit", 2000);
 		loadIntConfig(L, GAME_PORT, "gameProtocolPort", 7172);
-		loadIntConfig(L, LEGACY_1100_GAME_PORT, "legacy1100GameProtocolPort", 0);
-		loadIntConfig(L, LEGACY_860_GAME_PORT, "legacy860GameProtocolPort", 0);
 		loadIntConfig(L, LOGIN_PORT, "loginProtocolPort", 7171);
 		loadIntConfig(L, MARKET_OFFER_DURATION, "marketOfferDuration", 30 * 24 * 60 * 60);
 		loadIntConfig(L, MARKET_REFRESH_PRICES, "marketRefreshPricesInterval", 30);
@@ -84,19 +223,30 @@ bool ConfigManager::load() {
 	loadBoolConfig(L, ALLOW_RELOAD, "allowReload", false);
 	loadBoolConfig(L, AUTOBANK, "autoBank", false);
 	loadBoolConfig(L, AUTOLOOT, "autoLoot", false);
+	loadBoolConfig(L, BOT_PLAYERS_SHOW_AS_ONLINE, "botPlayersShowAsOnline", true);
+	// Bot Liveness Pack booleans (see BOT_SYSTEM_DOCS.md)
+	loadBoolConfig(L, BOT_PERSONALITY_REROLL_ON_RESTART, "botPersonalityRerollOnRestart", true);
+	loadBoolConfig(L, BOT_CHAT_VERBOSE_LOG,             "botChatVerboseLog",              false);
+	// Whether hibernated bots can post to channels 3 (World Chat) + 5 (Advertising).
+	// They never post Local Chat since they're not in the world. Set false to silence all
+	// hibernated chat traffic (e.g. for soak testing).
+	loadBoolConfig(L, BOT_HIBERNATED_CHAT_ENABLED,      "botHibernatedChatEnabled",       true);
+	// Best-effort telemetry writes to bot_chat_emissions / bot_hub_presence_60s (used
+	// only to measure chat dup rates offline — never read by runtime logic). Off by
+	// default; the chat anti-repeat/throttle is fully in-memory and unaffected.
+	loadBoolConfig(L, BOT_TELEMETRY_ENABLED,            "botTelemetryEnabled",            false);
 	loadBoolConfig(L, BOOSTED_BOSS_SLOT, "boostedBossSlot", true);
+	loadBoolConfig(L, CAST_ENABLED, "castEnabled", false);
 	loadBoolConfig(L, CLASSIC_ATTACK_SPEED, "classicAttackSpeed", false);
 	loadBoolConfig(L, CLEAN_PROTECTION_ZONES, "cleanProtectionZones", false);
 	loadBoolConfig(L, CONVERT_UNSAFE_SCRIPTS, "convertUnsafeScripts", true);
 	loadBoolConfig(L, DISABLE_MONSTER_ARMOR, "disableMonsterArmor", false);
 	loadBoolConfig(L, DISCORD_SEND_FOOTER, "discordSendFooter", true);
 	loadBoolConfig(L, EMOTE_SPELLS, "emoteSpells", false);
-	loadBoolConfig(L, LEARN_SPELLS, "toggleLearnSpells", true);
 	loadBoolConfig(L, ENABLE_PLAYER_PUT_ITEM_IN_AMMO_SLOT, "enablePlayerPutItemInAmmoSlot", false);
 	loadBoolConfig(L, ENABLE_SUPPORT_OUTFIT, "enableSupportOutfit", true);
 	loadBoolConfig(L, EXPERIENCE_FROM_PLAYERS, "experienceByKillingPlayers", false);
 	loadBoolConfig(L, FREE_PREMIUM, "freePremium", false);
-	loadBoolConfig(L, GENERATE_LUA_API_DOCS, "generateLuaApiDocs", true);
 	loadBoolConfig(L, GLOBAL_SERVER_SAVE_CLEAN_MAP, "globalServerSaveCleanMap", false);
 	loadBoolConfig(L, GLOBAL_SERVER_SAVE_CLOSE, "globalServerSaveClose", false);
 	loadBoolConfig(L, GLOBAL_SERVER_SAVE_NOTIFY_MESSAGE, "globalServerSaveNotifyMessage", true);
@@ -105,9 +255,6 @@ bool ConfigManager::load() {
 	loadBoolConfig(L, HOUSE_PURSHASED_SHOW_PRICE, "housePurchasedShowPrice", false);
 	loadBoolConfig(L, INVENTORY_GLOW, "inventoryGlowOnFiveBless", false);
 	loadBoolConfig(L, LOYALTY_ENABLED, "loyaltyEnabled", true);
-	loadBoolConfig(L, LUA_SCRIPT_BYTECODE_CACHE, "luaScriptBytecodeCache", true);
-	loadBoolConfig(L, LUA_SCRIPT_DEBUG_HOOK, "luaScriptDebugHook", false);
-	loadBoolConfig(L, LUA_STARTUP_LOAD_TELEMETRY, "luaStartupLoadTelemetry", false);
 	loadBoolConfig(L, MARKET_PREMIUM, "premiumToCreateMarketOffer", true);
 	loadBoolConfig(L, METRICS_ENABLE_OSTREAM, "metricsEnableOstream", false);
 	loadBoolConfig(L, METRICS_ENABLE_PROMETHEUS, "metricsEnablePrometheus", false);
@@ -115,6 +262,7 @@ bool ConfigManager::load() {
 	loadBoolConfig(L, ONLY_PREMIUM_ACCOUNT, "onlyPremiumAccount", false);
 	loadBoolConfig(L, PARTY_AUTO_SHARE_EXPERIENCE, "partyAutoShareExperience", true);
 	loadBoolConfig(L, PARTY_SHARE_LOOT_BOOSTS, "partyShareLootBoosts", true);
+	loadBoolConfig(L, PLAYER_LOSE_ITEMS_ON_DEATH, "playerLoseItemsOnDeath", true);
 	loadBoolConfig(L, PREY_ENABLED, "preySystemEnabled", true);
 	loadBoolConfig(L, PREY_FREE_THIRD_SLOT, "preyFreeThirdSlot", false);
 	loadBoolConfig(L, PUSH_WHEN_ATTACKING, "pushWhenAttacking", false);
@@ -204,16 +352,12 @@ bool ConfigManager::load() {
 	loadFloatConfig(L, RUSE_CHANCE_FORMULA_A, "ruseChanceFormulaA", 0.0307576);
 	loadFloatConfig(L, RUSE_CHANCE_FORMULA_B, "ruseChanceFormulaB", 0.440697);
 	loadFloatConfig(L, RUSE_CHANCE_FORMULA_C, "ruseChanceFormulaC", 0.026);
-	loadFloatConfig(L, TRANSCENDENCE_CHANCE_FORMULA_A, "transcendenceChanceFormulaA", 0.0127);
-	loadFloatConfig(L, TRANSCENDENCE_CHANCE_FORMULA_B, "transcendenceChanceFormulaB", 0.1070);
-	loadFloatConfig(L, TRANSCENDENCE_CHANCE_FORMULA_C, "transcendenceChanceFormulaC", 0.0073);
+	loadFloatConfig(L, TRANSCENDENCE_CHANCE_FORMULA_A, "transcendanceChanceFormulaA", 0.0127);
+	loadFloatConfig(L, TRANSCENDENCE_CHANCE_FORMULA_B, "transcendanceChanceFormulaB", 0.1070);
+	loadFloatConfig(L, TRANSCENDENCE_CHANCE_FORMULA_C, "transcendanceChanceFormulaC", 0.0073);
 	loadFloatConfig(L, AMPLIFICATION_CHANCE_FORMULA_A, "amplificationChanceFormulaA", 0.4);
 	loadFloatConfig(L, AMPLIFICATION_CHANCE_FORMULA_B, "amplificationChanceFormulaB", 1.7);
 	loadFloatConfig(L, AMPLIFICATION_CHANCE_FORMULA_C, "amplificationChanceFormulaC", 0.4);
-
-	loadFloatConfig(L, PLAYER_BASE_CRITICAL_CHANCE, "playerBaseCriticalChance", 0.05);
-	loadFloatConfig(L, PLAYER_BASE_CRITICAL_DAMAGE, "playerBaseCriticalDamage", 0.1);
-	loadFloatConfig(L, WEAPON_PROFICIENCY_GAIN_MULTIPLIER, "weaponProficiencyGainMultiplier", 0.33);
 
 	loadFloatConfig(L, ANIMUS_MASTERY_MAX_MONSTER_XP_MULTIPLIER, "animusMasteryMaxMonsterXpMultiplier", 4.0);
 	loadFloatConfig(L, ANIMUS_MASTERY_MONSTER_XP_MULTIPLIER, "animusMasteryMonsterXpMultiplier", 2.0);
@@ -230,6 +374,8 @@ bool ConfigManager::load() {
 	loadIntConfig(L, BOSSTIARY_KILL_MULTIPLIER, "bosstiaryKillMultiplier", 1);
 	loadIntConfig(L, BUY_AOL_COMMAND_FEE, "buyAolCommandFee", 0);
 	loadIntConfig(L, BUY_BLESS_COMMAND_FEE, "buyBlessCommandFee", 0);
+	loadIntConfig(L, CAST_MAX_VIEWERS, "castMaxViewers", 50);
+	loadIntConfig(L, CAST_MAX_VIEWERS_PER_IP, "castMaxViewersPerIp", 3);
 	loadIntConfig(L, CHECK_EXPIRED_MARKET_OFFERS_EACH_MINUTES, "checkExpiredMarketOffersEachMinutes", 60);
 	loadIntConfig(L, COMBAT_CHAIN_DELAY, "combatChainDelay", 50);
 	loadIntConfig(L, COMBAT_CHAIN_TARGETS, "combatChainTargets", 5);
@@ -281,14 +427,7 @@ bool ConfigManager::load() {
 	loadIntConfig(L, HOUSE_LOSE_AFTER_INACTIVITY, "houseLoseAfterInactivity", 0);
 	loadIntConfig(L, HOUSE_PRICE_PER_SQM, "housePriceEachSQM", 1000);
 	loadIntConfig(L, KICK_AFTER_MINUTES, "kickIdlePlayerAfterMinutes", 15);
-	loadIntConfig(L, LIVESTREAM_CASTER_MIN_LEVEL, "livestreamCasterMinLevel", 200);
-	loadFloatConfig(L, LIVESTREAM_EXPERIENCE_MULTIPLIER, "livestreamExperienceMultiplier", 1.15f);
-	loadIntConfig(L, LIVESTREAM_MAXIMUM_VIEWERS, "livestreamMaximumViewers", 10);
-	loadIntConfig(L, LIVESTREAM_MAXIMUM_VIEWERS_PER_IP, "livestreamMaximumViewersPerIP", 2);
-	loadIntConfig(L, LIVESTREAM_PREMIUM_MAXIMUM_VIEWERS, "livestreamPremiumMaximumViewers", 20);
 	loadIntConfig(L, LOOTPOUCH_MAXLIMIT, "lootPouchMaxLimit", 2000);
-	loadIntConfig(L, LUA_SCRIPT_DEBUG_HOOK_INTERVAL, "luaScriptDebugHookInterval", 30000);
-	loadIntConfig(L, QUICK_LOOT_MAX_CORPSES, "quickLootMaxCorpses", 30);
 	loadIntConfig(L, LOW_LEVEL_BONUS_EXP, "lowLevelBonusExp", 50);
 	loadIntConfig(L, LOYALTY_POINTS_PER_CREATION_DAY, "loyaltyPointsPerCreationDay", 1);
 	loadIntConfig(L, LOYALTY_POINTS_PER_PREMIUM_DAY_PURCHASED, "loyaltyPointsPerPremiumDayPurchased", 0);
@@ -297,7 +436,6 @@ bool ConfigManager::load() {
 	loadIntConfig(L, MAX_CONTAINER_ITEM, "maxItem", 5000);
 	loadIntConfig(L, MAX_CONTAINER, "maxContainer", 500);
 	loadIntConfig(L, MAX_CONTAINER_DEPTH, "maxContainerDepth", 200);
-	loadIntConfig(L, MAX_EXIVA_WHITELIST, "maxExivaWhitelist", 100);
 	loadIntConfig(L, MAX_INBOX_ITEMS, "maxInboxItems", 0);
 	loadIntConfig(L, MAX_DAMAGE_REFLECTION, "maxDamageReflection", 200);
 	loadIntConfig(L, MAX_ELEMENTAL_RESISTANCE, "maxElementalResistance", 200);
@@ -360,8 +498,6 @@ bool ConfigManager::load() {
 	loadIntConfig(L, VIP_BONUS_SKILL, "vipBonusSkill", 0);
 	loadIntConfig(L, VIP_FAMILIAR_TIME_COOLDOWN_REDUCTION, "vipFamiliarTimeCooldownReduction", 0);
 	loadIntConfig(L, WEEK_KILLS_TO_RED, "weekKillsToRedSkull", 5);
-	loadIntConfig(L, MONK_QUEST_TOTAL_SHRINES, "monkQuestTotalShrines", 11);
-	loadIntConfig(L, WHEEL_MONK_QUEST_BONUS, "wheelMonkQuestBonus", 10);
 	loadIntConfig(L, WHEEL_ATELIER_REVEAL_GREATER_COST, "wheelAtelierRevealGreaterCost", 6000000);
 	loadIntConfig(L, WHEEL_ATELIER_REVEAL_LESSER_COST, "wheelAtelierRevealLesserCost", 125000);
 	loadIntConfig(L, WHEEL_ATELIER_REVEAL_REGULAR_COST, "wheelAtelierRevealRegularCost", 1000000);
@@ -374,8 +510,6 @@ bool ConfigManager::load() {
 	loadIntConfig(L, AUGMENT_POWERFUL_IMPACT_PERCENT, "augmentPowerfulImpactPercent", 10);
 	loadIntConfig(L, AUGMENT_STRONG_IMPACT_PERCENT, "augmentStrongImpactPercent", 7);
 	loadIntConfig(L, ANIMUS_MASTERY_MONSTERS_TO_INCREASE_XP_MULTIPLIER, "animusMasteryMonstersToIncreaseXpMultiplier", 10);
-	loadIntConfig(L, WEAPON_PROFICIENCY_MAX_LEVELS, "weaponProficiencyMaxLevels", 10);
-	loadIntConfig(L, WEAPON_PROFICIENCY_MAX_PERKS_PER_LEVEL, "weaponProficiencyMaxPerksPerLevel", 6);
 
 	loadStringConfig(L, CORE_DIRECTORY, "coreDirectory", "data");
 	loadStringConfig(L, DATA_DIRECTORY, "dataPackDirectory", "data-otservbr-global");
@@ -387,7 +521,6 @@ bool ConfigManager::load() {
 	loadStringConfig(L, LOCATION, "location", "");
 	loadStringConfig(L, M_CONST, "memoryConst", "1<<16");
 	loadStringConfig(L, METRICS_PROMETHEUS_ADDRESS, "metricsPrometheusAddress", "localhost:9464");
-	loadStringConfig(L, LUA_SCRIPT_BYTECODE_CACHE_PATH, "luaScriptBytecodeCachePath", "cache/lua-bytecode");
 	loadStringConfig(L, OWNER_EMAIL, "ownerEmail", "");
 	loadStringConfig(L, OWNER_NAME, "ownerName", "");
 	loadStringConfig(L, SAVE_INTERVAL_TYPE, "saveIntervalType", "");
@@ -398,7 +531,6 @@ bool ConfigManager::load() {
 	loadStringConfig(L, URL, "url", "");
 	loadStringConfig(L, WORLD_TYPE, "worldType", "pvp");
 	loadStringConfig(L, LOGLEVEL, "logLevel", "info");
-	loadStringConfig(L, LUA_API_DOCS_OUTPUT_DIRECTORY, "luaApiDocsOutputDirectory", "docs/lua-api");
 
 	loadLuaOTCFeatures(L);
 

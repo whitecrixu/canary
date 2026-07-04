@@ -22,9 +22,7 @@ npcConfig.outfit = {
 
 npcConfig.flags = {
 	floorchange = false,
-	profession = "banker",
 }
-npcConfig.speechBubble = SPEECHBUBBLE_BANKER
 
 npcConfig.voices = {
 	interval = 15000,

@@ -362,8 +362,8 @@ void Monster::onRemoveCreature(const std::shared_ptr<Creature> &creature, bool i
 	}
 
 	if (creature.get() == this) {
-		if (const auto &spawn = spawnMonster.lock()) {
-			spawn->startSpawnMonsterCheck();
+		if (spawnMonster) {
+			spawnMonster->startSpawnMonsterCheck();
 		}
 
 		setIdle(true);
@@ -541,12 +541,12 @@ void Monster::onSpawn(const Position &position) {
 }
 
 void Monster::addFriend(const std::shared_ptr<Creature> &creature) {
-	if (creature.get() == this) {
+	if (creature == getMonster()) {
 		g_logger().error("[{}]: adding creature is same of monster", __FUNCTION__);
 		return;
 	}
 
-	assert(creature.get() != this);
+	assert(creature != getMonster());
 	friendList.try_emplace(creature->getID(), creature);
 }
 
@@ -558,12 +558,12 @@ void Monster::removeFriend(const std::shared_ptr<Creature> &creature) {
 }
 
 bool Monster::addTarget(const std::shared_ptr<Creature> &creature, bool pushFront /* = false*/) {
-	if (creature.get() == this) {
+	if (creature == getMonster()) {
 		g_logger().error("[{}]: adding creature is same of monster", __FUNCTION__);
 		return false;
 	}
 
-	assert(creature.get() != this);
+	assert(creature != getMonster());
 
 	auto it = getTargetIterator(creature);
 	if (it != targetList.end()) {
@@ -752,19 +752,10 @@ bool Monster::searchTarget(TargetSearchType_t searchType /*= TARGETSEARCH_DEFAUL
 	std::vector<std::shared_ptr<Creature>> resultList;
 	const Position &myPos = getPosition();
 
-	// When the current melee target is path-blocked (magic wall, untraversable field),
-	// exclude it so a reachable alternative can be chosen instead of repeatedly picking
-	// the same unreachable creature as "nearest".
-	const auto &currentAttacked = getAttackedCreature();
-	const bool skipCurrentUnreachable = currentAttacked && targetDistance <= 1 && !hasFollowPath;
-
 	for (const auto &cref : targetList) {
 		const auto &creature = cref.lock();
 		if (creature && isTarget(creature)) {
-			if (skipCurrentUnreachable && creature == currentAttacked) {
-				continue;
-			}
-			if ((targetDistance == 1) || canUseAttack(myPos, creature)) {
+			if ((static_self_cast<Monster>()->targetDistance == 1) || canUseAttack(myPos, creature)) {
 				resultList.emplace_back(creature);
 			}
 		}
@@ -876,10 +867,7 @@ bool Monster::searchTarget(TargetSearchType_t searchType /*= TARGETSEARCH_DEFAUL
 	}
 
 	// lets just pick the first target in the list
-	return std::ranges::any_of(getTargetList(), [this, skipCurrentUnreachable, &currentAttacked](const std::shared_ptr<Creature> &creature) {
-		if (skipCurrentUnreachable && creature == currentAttacked) {
-			return false;
-		}
+	return std::ranges::any_of(getTargetList(), [this](const std::shared_ptr<Creature> &creature) {
 		return selectTarget(creature);
 	});
 }
@@ -1030,7 +1018,7 @@ bool Monster::getIdleStatus() const {
 }
 
 bool Monster::isInSpawnLocation() const {
-	if (spawnMonster.expired()) {
+	if (!spawnMonster) {
 		return true;
 	}
 	return position == masterPos || masterPos == Position();
@@ -2369,9 +2357,6 @@ void Monster::death(const std::shared_ptr<Creature> &lastHitCreature) {
 		return;
 	}
 
-	targetPlayer->weaponProficiency().applyOn(WeaponProficiencyHealth_t::LIFE, WeaponProficiencyGain_t::KILL);
-	targetPlayer->weaponProficiency().applyOn(WeaponProficiencyHealth_t::MANA, WeaponProficiencyGain_t::KILL);
-
 	auto [activeCharm, _] = g_iobestiary().getCharmFromTarget(targetPlayer, m_monsterType);
 	if (activeCharm == CHARM_CARNAGE) {
 		const auto &charm = g_iobestiary().getBestiaryCharm(activeCharm);
@@ -2379,18 +2364,6 @@ void Monster::death(const std::shared_ptr<Creature> &lastHitCreature) {
 		if (charm && charm->chance[charmTier] >= normal_random(1, 10000) / 100.0) {
 			g_iobestiary().parseCharmCombat(charm, targetPlayer, getMonster());
 		}
-	}
-
-	const auto equippedWeaponId = targetPlayer->getWeaponId(true);
-
-	const auto weaponExperienceFromBoss = targetPlayer->weaponProficiency().getBosstiaryExperience(m_monsterType->info.bosstiaryRace);
-	if (weaponExperienceFromBoss > 0) {
-		targetPlayer->weaponProficiency().addExperience(weaponExperienceFromBoss, equippedWeaponId);
-	}
-
-	const auto weaponExperienceFromBestiary = targetPlayer->weaponProficiency().getBestiaryExperience(m_monsterType->info.bestiaryStars);
-	if (weaponExperienceFromBestiary > 0) {
-		targetPlayer->weaponProficiency().addExperience(weaponExperienceFromBestiary, equippedWeaponId);
 	}
 }
 
@@ -2412,7 +2385,7 @@ std::shared_ptr<Item> Monster::getCorpse(const std::shared_ptr<Creature> &lastHi
 }
 
 bool Monster::isInSpawnRange(const Position &pos) const {
-	if (spawnMonster.expired()) {
+	if (!spawnMonster) {
 		return true;
 	}
 
@@ -2534,12 +2507,7 @@ void Monster::setNormalCreatureLight() {
 void Monster::drainHealth(const std::shared_ptr<Creature> &attacker, int32_t damage) {
 	Creature::drainHealth(attacker, damage);
 
-	// Allow walking through harmful fields when the monster is being damaged and either
-	// has no target (random stepping) or its current target is unreachable. Without the
-	// !hasFollowPath branch, a melee monster locked onto a target it cannot path to (magic
-	// walled, behind a non-traversable field) stays unable to push through fields even
-	// while taking damage from the very fields/bombs blocking its way.
-	if (damage > 0 && (randomStepping || (!hasFollowPath && getFollowCreature()))) {
+	if (damage > 0 && randomStepping) {
 		ignoreFieldDamage = true;
 	}
 
@@ -2702,7 +2670,7 @@ void Monster::applyStacks() {
 	health = newHealth;
 }
 
-void Monster::configureForgeSystem(uint16_t stack /* = 0 */) {
+void Monster::configureForgeSystem() {
 	if (!canBeForgeMonster()) {
 		return;
 	}
@@ -2712,9 +2680,7 @@ void Monster::configureForgeSystem(uint16_t stack /* = 0 */) {
 		setIcon("forge", CreatureIcon(CreatureIconModifications_t::Fiendish, 0 /* don't show stacks on fiends */));
 		g_game().updateCreatureIcon(static_self_cast<Monster>());
 	} else if (monsterForgeClassification == ForgeClassifications_t::FORGE_INFLUENCED_MONSTER) {
-		if (stack == 0) {
-			stack = static_cast<uint16_t>(normal_random(1, 5));
-		}
+		auto stack = static_cast<uint16_t>(normal_random(1, 5));
 		setForgeStack(stack);
 		setIcon("forge", CreatureIcon(CreatureIconModifications_t::Influenced, stack));
 		g_game().updateCreatureIcon(static_self_cast<Monster>());

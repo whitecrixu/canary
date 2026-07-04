@@ -28,9 +28,7 @@ function createHirelingType(HirelingName)
 
 	npcConfig.flags = {
 		floorchange = false,
-		profession = "hireling",
 	}
-	npcConfig.speechBubble = SPEECHBUBBLE_HIRELING
 
 	local itemsTable = {
 		["various"] = {

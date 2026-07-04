@@ -43,7 +43,7 @@ function StdModule.kick(npc, player, message, keywords, parameters, node)
 
 	Player(player):teleportTo(destination, true)
 
-	npcHandler:resetNpc(npc, player)
+	npcHandler:resetNpc(player)
 	return true
 end
 
@@ -54,16 +54,12 @@ function GreetModule.greet(npc, player, message, keywords, parameters)
 	end
 
 	if parameters.npcHandler:checkInteraction(npc, player) then
-		NpcDialog.add(player, npc:getId())
-		NpcDialog.sendWindow(player)
 		return true
 	end
 
 	local parseInfo = { [TAG_PLAYERNAME] = Player(player):getName() }
 	parameters.npcHandler:say(parameters.npcHandler:parseMessage(parameters.text, parseInfo), npc, player)
 	parameters.npcHandler:setInteraction(npc, player)
-	NpcDialog.add(player, npc:getId())
-	NpcDialog.sendWindow(player)
 	return true
 end
 
@@ -74,10 +70,8 @@ function GreetModule.farewell(npc, player, message, keywords, parameters)
 
 	local parseInfo = { [TAG_PLAYERNAME] = Player(player):getName() }
 	parameters.npcHandler:say(parameters.npcHandler:parseMessage(parameters.text, parseInfo), npc, player)
-	parameters.npcHandler:resetNpc(npc, player)
+	parameters.npcHandler:resetNpc(player)
 	parameters.npcHandler:removeInteraction(npc, player)
-	NpcDialog.remove(player, npc:getId())
-	NpcDialog.sendWindow(player)
 	return true
 end
 

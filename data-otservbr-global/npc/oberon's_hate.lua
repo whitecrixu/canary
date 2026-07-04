@@ -16,9 +16,7 @@ npcConfig.outfit = {
 
 npcConfig.flags = {
 	floorchange = false,
-	profession = "normal",
 }
-npcConfig.speechBubble = SPEECHBUBBLE_NORMAL
 
 -- npcType registering the npcConfig table
 npcType:register(npcConfig)

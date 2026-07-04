@@ -16,14 +16,9 @@
 #include "lua/functions/lua_functions_loader.hpp"
 
 void SpellFunctions::init(lua_State* L) {
-	Lua::registerSharedClass<Spell>(L, "", SpellFunctions::luaSpellCreate);
+	Lua::registerSharedClass(L, "Spell", "", SpellFunctions::luaSpellCreate);
 	Lua::registerMetaMethod(L, "Spell", "__eq", Lua::luaUserdataCompare);
 
-	/***
-	 * @function Spell:onCastSpell
-	 * @param callback fun(creature: Creature, variant: Variant, isHotkey?: boolean): boolean
-	 * @return boolean
-	 */
 	Lua::registerMethod(L, "Spell", "onCastSpell", SpellFunctions::luaSpellOnCastSpell);
 	Lua::registerMethod(L, "Spell", "register", SpellFunctions::luaSpellRegister);
 	Lua::registerMethod(L, "Spell", "name", SpellFunctions::luaSpellName);
@@ -69,10 +64,6 @@ void SpellFunctions::init(lua_State* L) {
 	Lua::registerMethod(L, "Spell", "monkSpellType", SpellFunctions::luaSpellMonkSpellType);
 }
 
-/***
- * @class Spell
- * @overload fun(nameOrTypeOrId: string|integer): Spell?
- */
 int SpellFunctions::luaSpellCreate(lua_State* L) {
 	// Spell(words, name or id) to get an existing spell
 	// Spell(type) ex: Spell(SPELL_INSTANT) or Spell(SPELL_RUNE) to create a new spell
@@ -90,7 +81,8 @@ int SpellFunctions::luaSpellCreate(lua_State* L) {
 		const auto &rune = g_spells().getRuneSpell(id);
 
 		if (rune) {
-			Lua::pushSharedUserdata<Spell>(L, rune);
+			Lua::pushUserdata<Spell>(L, rune);
+			Lua::setMetatable(L, -1, "Spell");
 			return 1;
 		}
 
@@ -99,17 +91,20 @@ int SpellFunctions::luaSpellCreate(lua_State* L) {
 		const std::string arg = Lua::getString(L, 2);
 		auto instant = g_spells().getInstantSpellByName(arg);
 		if (instant) {
-			Lua::pushSharedUserdata<Spell>(L, instant);
+			Lua::pushUserdata<Spell>(L, instant);
+			Lua::setMetatable(L, -1, "Spell");
 			return 1;
 		}
 		instant = g_spells().getInstantSpell(arg);
 		if (instant) {
-			Lua::pushSharedUserdata<Spell>(L, instant);
+			Lua::pushUserdata<Spell>(L, instant);
+			Lua::setMetatable(L, -1, "Spell");
 			return 1;
 		}
 		const auto &rune = g_spells().getRuneSpellByName(arg);
 		if (rune) {
-			Lua::pushSharedUserdata<Spell>(L, rune);
+			Lua::pushUserdata<Spell>(L, rune);
+			Lua::setMetatable(L, -1, "Spell");
 			return 1;
 		}
 
@@ -123,12 +118,14 @@ int SpellFunctions::luaSpellCreate(lua_State* L) {
 
 	if (spellType == SPELL_INSTANT) {
 		const auto &spell = std::make_shared<InstantSpell>();
-		Lua::pushSharedUserdata<Spell>(L, spell);
+		Lua::pushUserdata<Spell>(L, spell);
+		Lua::setMetatable(L, -1, "Spell");
 		spell->spellType = SPELL_INSTANT;
 		return 1;
 	} else if (spellType == SPELL_RUNE) {
 		const auto &runeSpell = std::make_shared<RuneSpell>();
-		Lua::pushSharedUserdata<Spell>(L, runeSpell);
+		Lua::pushUserdata<Spell>(L, runeSpell);
+		Lua::setMetatable(L, -1, "Spell");
 		runeSpell->spellType = SPELL_RUNE;
 		return 1;
 	}

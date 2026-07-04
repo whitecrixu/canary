@@ -32,8 +32,6 @@ private:
 
 	static int luaContainerGetCorpseOwner(lua_State* L);
 	static int luaContainerRegisterReward(lua_State* L);
-	static int luaContainerRemoveAllItems(lua_State* L);
-	static int luaContainerRemoveItemById(lua_State* L);
 
 	friend class ItemFunctions;
 };

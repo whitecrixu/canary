@@ -380,10 +380,10 @@ local function configureLootAttributes(lootObject, lootProperties)
 	lootObject:setUnique(lootProperties.unique or false)
 end
 
-local function addChildrenLoot(parent, childrenLoot, monsterName)
+local function addChildrenLoot(parent, childrenLoot)
 	SortLootByChance(childrenLoot)
 	for _, child in pairs(childrenLoot) do
-		local childLoot = Loot(monsterName or "")
+		local childLoot = Loot()
 		if child.name then
 			if not childLoot:setIdFromName(child.name) then
 				return true
@@ -404,9 +404,8 @@ function MonsterType:createLoot(lootTable)
 	SortLootByChance(lootTable)
 	local lootError = false
 
-	local monsterName = self:name() or ""
 	for _, loot in pairs(lootTable) do
-		local parent = Loot(monsterName)
+		local parent = Loot()
 		if loot.name then
 			if not parent:setIdFromName(loot.name) then
 				lootError = true
@@ -420,7 +419,7 @@ function MonsterType:createLoot(lootTable)
 
 		configureLootAttributes(parent, loot)
 
-		if loot.child and addChildrenLoot(parent, loot.child, monsterName) then
+		if loot.child and addChildrenLoot(parent, loot.child) then
 			lootError = true
 		end
 
@@ -428,7 +427,7 @@ function MonsterType:createLoot(lootTable)
 	end
 
 	if lootError then
-		logger.warn("[MonsterType:createLoot] - Monster: {} loot could not be loaded correctly", monsterName)
+		logger.warn("[MonsterType:createLoot] - Monster: {} loot could not be loaded correctly", self:getName())
 	end
 end
 

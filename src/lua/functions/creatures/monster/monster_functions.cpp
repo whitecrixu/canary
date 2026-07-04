@@ -121,7 +121,8 @@ int MonsterFunctions::luaMonsterGetType(lua_State* L) {
 	// monster:getType()
 	const auto &monster = Lua::getUserdataShared<Monster>(L, 1, "Monster");
 	if (monster) {
-		Lua::pushSharedUserdata<MonsterType>(L, monster->m_monsterType);
+		Lua::pushUserdata<MonsterType>(L, monster->m_monsterType);
+		Lua::setMetatable(L, -1, "MonsterType");
 	} else {
 		lua_pushnil(L);
 	}
@@ -557,17 +558,15 @@ int MonsterFunctions::luaMonsterSetForgeStack(lua_State* L) {
 }
 
 int MonsterFunctions::luaMonsterConfigureForgeSystem(lua_State* L) {
-	// monster:configureForgeSystem([stack])
-	const auto stack = Lua::getNumber<uint16_t>(L, 2, 0);
+	// monster:configureForgeSystem()
 	const auto &monster = Lua::getUserdataShared<Monster>(L, 1, "Monster");
 	if (!monster) {
 		Lua::reportErrorFunc(Lua::getErrorDesc(LUA_ERROR_MONSTER_NOT_FOUND));
 		Lua::pushBoolean(L, false);
-		return 1;
+		return 0;
 	}
 
-	monster->configureForgeSystem(stack);
-	Lua::pushBoolean(L, true);
+	monster->configureForgeSystem();
 	return 1;
 }
 

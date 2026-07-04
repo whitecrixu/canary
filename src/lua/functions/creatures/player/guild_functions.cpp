@@ -14,7 +14,7 @@
 #include "lua/functions/lua_functions_loader.hpp"
 
 void GuildFunctions::init(lua_State* L) {
-	Lua::registerSharedClass<Guild>(L, "", GuildFunctions::luaGuildCreate);
+	Lua::registerSharedClass(L, "Guild", "", GuildFunctions::luaGuildCreate);
 	Lua::registerMetaMethod(L, "Guild", "__eq", Lua::luaUserdataCompare);
 
 	Lua::registerMethod(L, "Guild", "getId", GuildFunctions::luaGuildGetId);
@@ -36,7 +36,8 @@ int GuildFunctions::luaGuildCreate(lua_State* L) {
 	const uint32_t id = Lua::getNumber<uint32_t>(L, 2);
 	const auto &guild = g_game().getGuild(id);
 	if (guild) {
-		Lua::pushSharedUserdata<Guild>(L, guild);
+		Lua::pushUserdata<Guild>(L, guild);
+		Lua::setMetatable(L, -1, "Guild");
 	} else {
 		lua_pushnil(L);
 	}

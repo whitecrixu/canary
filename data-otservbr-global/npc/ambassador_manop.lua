@@ -21,9 +21,7 @@ npcConfig.outfit = {
 
 npcConfig.flags = {
 	floorchange = false,
-	profession = "sailor",
 }
-npcConfig.speechBubble = SPEECHBUBBLE_SAILOR
 
 npcConfig.voices = {
 	interval = 15000,
@@ -122,7 +120,10 @@ local function creatureSayCallback(npc, creature, type, message)
 	end
 
 	local hasQuestLine = player:getStorageValue(Storage.Quest.U14_15.TheWayOfTheMonk.QuestLine) > 0
-	local hasAtLeastOneShrine = player:getStorageValue(Storage.Quest.U14_15.TheWayOfTheMonk.DawnportFirstShrine) > 0 or player:getStorageValue(Storage.Quest.U14_15.TheWayOfTheMonk.DawnportSecondShrine) > 0 or player:getStorageValue(Storage.Quest.U14_15.TheWayOfTheMonk.DawnportThirdShrine) > 0 or player:getStorageValue(Storage.Quest.U14_15.TheWayOfTheMonk.DawnportFourthShrine) > 0
+	local hasAtLeastOneShrine = player:getStorageValue(Storage.Quest.U14_15.TheWayOfTheMonk.DawnportFirstShrine) > 0
+		or player:getStorageValue(Storage.Quest.U14_15.TheWayOfTheMonk.DawnportSecondShrine) > 0
+		or player:getStorageValue(Storage.Quest.U14_15.TheWayOfTheMonk.DawnportThirdShrine) > 0
+		or player:getStorageValue(Storage.Quest.U14_15.TheWayOfTheMonk.DawnportFourthShrine) > 0
 
 	-- Heal and help dialog
 	if MsgContains(message, "invitation") and npcHandler:getTopic(playerId) == 0 then

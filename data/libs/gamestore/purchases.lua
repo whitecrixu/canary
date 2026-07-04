@@ -11,19 +11,8 @@ local function processItemPurchase(player, offerId, offerCount, movable, setOwne
 		return error({ code = 0, message = errorMsg })
 	end
 
-	local inbox = player:getStoreInbox()
-	local batchUpdate
-	if inbox then
-		batchUpdate = BatchUpdate(player)
-		batchUpdate:add(inbox)
-	end
-
 	for t = 1, offerCount do
-		player:addItemStoreInbox(offerId, 1, movable, setOwner)
-	end
-
-	if batchUpdate then
-		batchUpdate:delete()
+		player:addItemStoreInbox(offerId, offerCount or 1, movable, setOwner)
 	end
 end
 
@@ -89,9 +78,6 @@ local function processStackablePurchase(player, offerId, offerCount, offerName, 
 
 	local inbox = player:getStoreInbox()
 	if inbox then
-		local batchUpdate = BatchUpdate(player)
-		batchUpdate:add(inbox)
-
 		local stackSize = iType:getStackSize()
 		local remainingCount = offerCount
 		while remainingCount > 0 do
@@ -102,13 +88,10 @@ local function processStackablePurchase(player, offerId, offerCount, offerName, 
 					inboxItem:setAttribute(ITEM_ATTRIBUTE_STORE, systemTime())
 				end
 			else
-				batchUpdate:delete()
 				return error({ code = 0, message = "Error adding item to store inbox." })
 			end
 			remainingCount = remainingCount - countToAdd
 		end
-
-		batchUpdate:delete()
 	end
 end
 
@@ -129,9 +112,6 @@ local function processHouseRelatedPurchase(player, offer)
 
 	local inbox = player:getStoreInbox()
 	if inbox then
-		local batchUpdate = BatchUpdate(player)
-		batchUpdate:add(inbox)
-
 		for _, itemId in ipairs(itemIds) do
 			if isCaskItem(itemId) then
 				local decoKit = inbox:addItem(ITEM_DECORATION_KIT, 1)
@@ -158,8 +138,7 @@ local function processHouseRelatedPurchase(player, offer)
 				end
 			end
 		end
-
-		batchUpdate:delete()
+		player:sendUpdateContainer(inbox)
 	end
 end
 

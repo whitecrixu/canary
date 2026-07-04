@@ -11,9 +11,12 @@ local sayFunction = function(npcId, text, type, eventDelay, playerId)
 end
 
 function MsgContains(message, keyword)
-	local msg = " " .. message:lower() .. " "
-	local kw = keyword:lower():gsub("(%W)", "%%%1")
-	return msg:find("%W" .. kw .. "%W") ~= nil
+	local lowerMessage, lowerKeyword = message:lower(), keyword:lower()
+	if lowerMessage == lowerKeyword then
+		return true
+	end
+
+	return lowerMessage:find(lowerKeyword) and not lowerMessage:find("(%w+)" .. lowerKeyword)
 end
 
 function MsgFind(message, keyword)

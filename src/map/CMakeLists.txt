@@ -5,7 +5,6 @@ target_sources(
             utils/astarnodes.cpp
             utils/mapsector.cpp
             map.cpp
-            map_download.cpp
             mapcache.cpp
             spectators.cpp
 )

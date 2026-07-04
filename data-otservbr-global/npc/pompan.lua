@@ -21,9 +21,7 @@ npcConfig.outfit = {
 
 npcConfig.flags = {
 	floorchange = false,
-	profession = "trader",
 }
-npcConfig.speechBubble = SPEECHBUBBLE_TRADE
 
 local tomes = Storage.Quest.U8_54.TheNewFrontier.TomeofKnowledge
 npcConfig.shop = {

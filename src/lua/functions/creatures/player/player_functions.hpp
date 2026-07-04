@@ -31,6 +31,12 @@ class PlayerFunctions {
 	static int luaPlayerGetCharmChance(lua_State* L);
 	static int luaPlayerResetOldCharms(lua_State* L);
 	static int luaPlayerIsPlayer(lua_State* L);
+	static int luaPlayerIsBotPlayer(lua_State* L);
+	static int luaPlayerSetBotPlayer(lua_State* L);
+
+	static int luaPlayerIsCastBroadcasting(lua_State* L);
+	static int luaPlayerSetCastBroadcasting(lua_State* L);
+	static int luaPlayerGetCastViewerCount(lua_State* L);
 
 	static int luaPlayerGetGuid(lua_State* L);
 	static int luaPlayerGetIp(lua_State* L);
@@ -86,6 +92,7 @@ class PlayerFunctions {
 
 	static int luaPlayerGetSkullTime(lua_State* L);
 	static int luaPlayerSetSkullTime(lua_State* L);
+	static int luaPlayerGetSkullClient(lua_State* L);
 	static int luaPlayerGetDeathPenalty(lua_State* L);
 
 	static int luaPlayerGetExperience(lua_State* L);
@@ -181,7 +188,6 @@ class PlayerFunctions {
 
 	static int luaPlayerAddItem(lua_State* L);
 	static int luaPlayerAddItemEx(lua_State* L);
-	static int luaPlayerAddItemBatchToPaginedContainer(lua_State* L);
 	static int luaPlayerAddItemStash(lua_State* L);
 	static int luaPlayerRemoveStashItem(lua_State* L);
 	static int luaPlayerRemoveItem(lua_State* L);
@@ -202,8 +208,8 @@ class PlayerFunctions {
 	static int luaPlayerOpenChannel(lua_State* L);
 
 	static int luaPlayerGetSlotItem(lua_State* L);
-	static int luaPlayerGetBackpack(lua_State* L);
-	static int luaPlayerGetLootPouch(lua_State* L);
+	static int luaPlayerSetSlotItem(lua_State* L);
+	static int luaPlayerCastSpell(lua_State* L);
 
 	static int luaPlayerGetParty(lua_State* L);
 
@@ -235,7 +241,6 @@ class PlayerFunctions {
 	static int luaPlayerGetTransferableCoins(lua_State* L);
 	static int luaPlayerAddTransferableCoins(lua_State* L);
 	static int luaPlayerRemoveTransferableCoins(lua_State* L);
-	static int luaPlayerRemoveTransferableAndTibiaCoins(lua_State* L);
 
 	static int luaPlayerSendBlessStatus(lua_State* L);
 	static int luaPlayerHasBlessing(lua_State* L);
@@ -249,10 +254,8 @@ class PlayerFunctions {
 	static int luaPlayerForgetSpell(lua_State* L);
 	static int luaPlayerHasLearnedSpell(lua_State* L);
 
-	static int luaPlayerApplyImbuementScroll(lua_State* L);
 	static int luaPlayerOpenImbuementWindow(lua_State* L);
 	static int luaPlayerCloseImbuementWindow(lua_State* L);
-	static int luaPlayerClearAllImbuements(lua_State* L);
 
 	static int luaPlayerSendTutorial(lua_State* L);
 	static int luaPlayerAddMapMark(lua_State* L);
@@ -279,8 +282,10 @@ class PlayerFunctions {
 	static int luaPlayerCanCast(lua_State* L);
 
 	static int luaPlayerHasChaseMode(lua_State* L);
+	static int luaPlayerSetChaseMode(lua_State* L);
 	static int luaPlayerHasSecureMode(lua_State* L);
 	static int luaPlayerGetFightMode(lua_State* L);
+	static int luaPlayerSetFightMode(lua_State* L);
 
 	static int luaPlayerGetBaseXpGain(lua_State* L);
 	static int luaPlayerSetBaseXpGain(lua_State* L);
@@ -367,10 +372,6 @@ class PlayerFunctions {
 
 	// Concoction system
 	static int luaPlayerUpdateConcoction(lua_State* L);
-
-	// Food system
-	static int luaPlayerUpdateFood(lua_State* L);
-
 	static int luaPlayerClearSpellCooldowns(lua_State* L);
 
 	static int luaPlayerIsVip(lua_State* L);
@@ -417,14 +418,6 @@ class PlayerFunctions {
 	static int luaPlayerGetHarmony(lua_State* L);
 	static int luaPlayerGetHarmonyDamage(lua_State* L);
 	static int luaCalculateFlatDamageHealing(lua_State* L);
-
-	static int luaPlayerSetSpeed(lua_State* L);
-	static int luaPlayerAddWeaponExperience(lua_State* L);
-
-	static int luaPlayerGetLivestreamViewersCount(lua_State* L);
-	static int luaPlayerGetLivestreamViewers(lua_State* L);
-	static int luaPlayerSetLivestreamViewers(lua_State* L);
-	static int luaPlayerIsLivestreamViewer(lua_State* L);
 
 	friend class CreatureFunctions;
 };
