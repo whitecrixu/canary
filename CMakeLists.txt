@@ -50,12 +50,12 @@ if(CMAKE_BUILD_TYPE
 )
     project(
         canary-debug
-        LANGUAGES CXX
+        LANGUAGES C CXX
     )
 else()
     project(
         canary
-        LANGUAGES CXX
+        LANGUAGES C CXX
     )
 endif()
 

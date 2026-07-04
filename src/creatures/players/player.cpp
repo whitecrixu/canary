@@ -8487,7 +8487,7 @@ void Player::sendCreatureChangeVisible(const std::shared_ptr<Creature> &creature
 			}
 			forwardToCastViewers([creature, outfit](ProtocolGame* v) { v->sendCreatureOutfit(creature, outfit); });
 		} else {
-			static Outfit_t outfit;
+			const Outfit_t outfit {};
 			if (client) {
 				client->sendCreatureOutfit(creature, outfit);
 			}
