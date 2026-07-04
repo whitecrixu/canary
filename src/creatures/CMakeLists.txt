@@ -49,13 +49,16 @@ if(NOT UNIX)
         PRIVATE players/bot/bot_engine.cpp
     )
     set_source_files_properties(
-        players/bot/bot_engine.cpp
+        ${CMAKE_CURRENT_SOURCE_DIR}/players/bot/bot_engine.cpp
+        TARGET_DIRECTORY
+        ${CORE_TARGET_NAME}
         PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
-                   SKIP_PRECOMPILE_HEADERS ON
     )
     if(MSVC)
         set_property(
-            SOURCE players/bot/bot_engine.cpp
+            SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/players/bot/bot_engine.cpp
+                   TARGET_DIRECTORY
+                   ${CORE_TARGET_NAME}
             APPEND
             PROPERTY COMPILE_OPTIONS /bigobj
         )
