@@ -178,13 +178,20 @@ foreach(
 
 endforeach()
 
-# Export symbols from the main binary so libbot_engine.so can resolve them via dlopen
-if(UNIX AND NOT APPLE)
+# Export symbols from the main binary so libbot_engine.so can resolve them via
+# dlopen
+if(UNIX
+   AND NOT APPLE
+)
     foreach(
         core_target IN
         LISTS CANARY_CORE_TARGETS
     )
-        target_link_options(${core_target} PRIVATE -rdynamic)
+        target_link_options(
+            ${core_target}
+            PRIVATE
+            -rdynamic
+        )
     endforeach()
 endif()
 

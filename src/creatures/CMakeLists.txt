@@ -42,25 +42,35 @@ target_sources(
 # Bot Engine shared library (hot-reloadable via dlopen)
 # ===========================================================================
 if(NOT UNIX)
-    # Windows: no dlopen/-rdynamic equivalent — compile the bot engine
-    # directly into the main binary (hot-reload unavailable).
-    target_sources(${CORE_TARGET_NAME} PRIVATE players/bot/bot_engine.cpp)
-    set_source_files_properties(players/bot/bot_engine.cpp
+    # Windows: no dlopen/-rdynamic equivalent — compile the bot engine directly
+    # into the main binary (hot-reload unavailable).
+    target_sources(
+        ${CORE_TARGET_NAME}
+        PRIVATE players/bot/bot_engine.cpp
+    )
+    set_source_files_properties(
+        players/bot/bot_engine.cpp
         PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON
                    SKIP_PRECOMPILE_HEADERS ON
     )
     if(MSVC)
-        set_property(SOURCE players/bot/bot_engine.cpp APPEND PROPERTY COMPILE_OPTIONS /bigobj)
+        set_property(
+            SOURCE players/bot/bot_engine.cpp
+            APPEND
+            PROPERTY COMPILE_OPTIONS /bigobj
+        )
     endif()
 endif()
 
 if(UNIX)
-    add_library(bot_engine SHARED
+    add_library(
+        bot_engine SHARED
         players/bot/bot_engine.cpp
     )
 
     # Same include directories as the main binary
-    target_include_directories(bot_engine
+    target_include_directories(
+        bot_engine
         PRIVATE ${CMAKE_SOURCE_DIR}/src
                 ${BOOST_DI_INCLUDE_DIRS}
                 ${LUAJIT_INCLUDE_DIRS}
@@ -69,7 +79,8 @@ if(UNIX)
     )
 
     # Link against libraries directly used by bot_engine.cpp
-    target_link_libraries(bot_engine
+    target_link_libraries(
+        bot_engine
         PRIVATE fmt::fmt
                 spdlog::spdlog
                 unofficial::libmariadb
@@ -79,31 +90,50 @@ if(UNIX)
                 ${LUAJIT_LIBRARIES}
     )
 
-    # Disable LTO and unity build — the .so resolves engine symbols at runtime via -rdynamic
-    set_target_properties(bot_engine PROPERTIES
-        UNITY_BUILD OFF
-        INTERPROCEDURAL_OPTIMIZATION OFF
-        POSITION_INDEPENDENT_CODE ON
-        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+    # Disable LTO and unity build — the .so resolves engine symbols at runtime
+    # via -rdynamic
+    set_target_properties(
+        bot_engine
+        PROPERTIES UNITY_BUILD OFF
+                   INTERPROCEDURAL_OPTIMIZATION OFF
+                   POSITION_INDEPENDENT_CODE ON
+                   LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
     )
-    target_compile_options(bot_engine
+    target_compile_options(
+        bot_engine
         PRIVATE -fno-lto
-                $<$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>>:-O3 -march=native>
+                $<$<OR:$<CONFIG:Release>,$<CONFIG:RelWithDebInfo>>:-O3
+                -march=native>
     )
-    target_link_options(bot_engine PRIVATE -fno-lto)
+    target_link_options(
+        bot_engine
+        PRIVATE
+        -fno-lto
+    )
 
     # Reuse precompiled headers from the main target if available
     if(USE_PRECOMPILED_HEADER)
-        target_precompile_headers(bot_engine REUSE_FROM ${CORE_TARGET_NAME})
-        target_compile_definitions(bot_engine PUBLIC USE_PRECOMPILED_HEADERS)
+        target_precompile_headers(
+            bot_engine
+            REUSE_FROM
+            ${CORE_TARGET_NAME}
+        )
+        target_compile_definitions(
+            bot_engine
+            PUBLIC USE_PRECOMPILED_HEADERS
+        )
     endif()
 
     # Compiler warnings matching main target
     if(CMAKE_COMPILER_IS_GNUCXX)
-        target_compile_options(bot_engine PRIVATE -Wno-deprecated-declarations)
+        target_compile_options(
+            bot_engine
+            PRIVATE -Wno-deprecated-declarations
+        )
     endif()
 
-    target_compile_definitions(bot_engine
+    target_compile_definitions(
+        bot_engine
         PUBLIC $<$<CONFIG:Release>:NDEBUG> $<$<CONFIG:RelWithDebInfo>:NDEBUG>
     )
 endif()
