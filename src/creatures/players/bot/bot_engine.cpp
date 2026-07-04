@@ -17488,8 +17488,8 @@ Position BotEngine::chooseWakePosition(BotState& bot, const Position& virtualPos
 	// reason as walkBack: internalTeleport placement doesn't fire onStepIn MoveEvents.
 	auto walkBackOffScreen = [&](const std::vector<Waypoint>& wps, size_t idx) -> std::pair<Position, size_t> {
 		if (wps.empty()) return {Position(), 0};
-		const ssize_t startIdx = static_cast<ssize_t>(std::min(idx, wps.size())) - 1;
-		for (ssize_t i = startIdx; i >= 0; --i) {
+		const std::ptrdiff_t startIdx = static_cast<std::ptrdiff_t>(std::min(idx, wps.size())) - 1;
+		for (std::ptrdiff_t i = startIdx; i >= 0; --i) {
 			if (wps[i].type != WaypointType::NODE) continue;
 			const Position& wp = wps[i].pos;
 			const int cheb = std::max(std::abs(static_cast<int>(wp.x) - static_cast<int>(virtualPos.x)),
@@ -17579,8 +17579,8 @@ Position BotEngine::chooseWakePosition(BotState& bot, const Position& virtualPos
 	// it's also excluded — the upstream NODE is always the correct wake target.
 	auto walkBack = [&](const std::vector<Waypoint>& wps, size_t idx) -> std::pair<Position, size_t> {
 		if (wps.empty()) return {Position(), 0};
-		const ssize_t startIdx = static_cast<ssize_t>(std::min(idx, wps.size())) - 1;
-		for (ssize_t i = startIdx; i >= 0; --i) {
+		const std::ptrdiff_t startIdx = static_cast<std::ptrdiff_t>(std::min(idx, wps.size())) - 1;
+		for (std::ptrdiff_t i = startIdx; i >= 0; --i) {
 			if (wps[i].type != WaypointType::NODE) continue;
 			if (isUnsafe(wps[i].pos)) continue;
 			return {wps[i].pos, static_cast<size_t>(i)};
